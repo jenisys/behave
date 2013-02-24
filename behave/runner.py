@@ -473,7 +473,7 @@ class Runner(object):
             step_globals[step_type.title()] = decorator
 
         for path in [steps_dir] + list(extra_step_paths):
-            for name in os.listdir(path):
+            for name in sorted(os.listdir(path)):
                 if name.endswith('.py'):
                     # -- LOAD STEP DEFINITION:
                     # Reset to default matcher after each step-definition.
