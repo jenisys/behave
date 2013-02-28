@@ -21,3 +21,6 @@ nosetests.xml
 reports/
 test_results/
 tools/virtualenvs
+.env
+*.sublime-project
+*.sublime-workspace
