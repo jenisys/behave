@@ -1,11 +1,11 @@
 @wip
-@issue_122
 Feature: Duplicated Step Definitions
 
-  As I behave user
+  As I tester and test writer
   I want to know when step definitions are duplicated
+  So that I can fix these problems.
 
-  # -- FAILS with pypy ?!?!
+
   Scenario: Duplicated Step in same File
     Given a new working directory
     And a file named "features/steps/alice_steps.py" with:
