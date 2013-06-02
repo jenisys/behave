@@ -17,17 +17,23 @@ NEWS and CHANGES:
 
   - Formatters:
 
+    * NEW: sphinx.steps formatter, generate Sphinx-based docs for step definitions (related to #166).
     * NEW: steps formatter, shows available step definitions.
     * NEW: steps.doc formatter, shows documentation of step definitions (related to: #55).
     * NEW: steps.usage formatter, shows where step definitions are used.
     * RENAMED: json-pretty, tag_count, tag_location => json.pretty, tags, tags.location
     * help: Shows now a better formatted list (improve readability).
 
+IMPROVEMENT:
+
+  * issue #166: behave should have a tool (or formatter) that generates Sphinx-based documentation (basics provided).
+
 FIXED:
 
   * issue #165: FIX issue #114: do not print a blank line when the feature is skipped (provided by: florentx).
   * issue #164: StepRegistry.find_match() extends registered step_type lists.
   * issue #122: Failing selftest feature: selftest.features/duplicated_step.feature.
+  * issue #110: Normalize paths provided at the command line (provided by: jesper).
 
 
 Version: 1.2.3a19 (2013-05-18)
