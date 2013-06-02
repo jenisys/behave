@@ -1,8 +1,9 @@
 Feature: Ensure that BAD/SAD Use cases of Background are detected
 
-  To improve diagnostics when parser failures occur
   As a test writer
-  I expect reasonable explanations what went wrong.
+  I want a reasonable explanation what went wrong when a parse error occurs
+  So that I can fix the problem fast.
+
 
     @setup
     Scenario: Feature Setup
