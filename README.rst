@@ -14,10 +14,9 @@ Behave
     :target: https://crate.io/packages/behave/
     :alt: Number of PyPI downloads
 
-.. |behave.logo| image:: https://raw.github.com/jenisys/behave/master/docs/_static/behave_logo1.png
+.. |logo| image:: https://raw.github.com/jenisys/behave/master/docs/_static/behave_logo1.png
 
-|behave.logo| behave is behaviour-driven development, Python style.
-
+behave is behaviour-driven development, Python style. |logo|
 
 Behavior-driven development (or BDD) is an agile software development
 technique that encourages collaboration between developers, QA and
