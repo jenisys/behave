@@ -2,9 +2,6 @@
 Behave
 ======
 
-.. image:: docs/_static/behave_logo.png
-   :alt: Behave logo
-
 .. image:: https://travis-ci.org/jenisys/behave.png?branch=master
    :target: https://travis-ci.org/jenisys/behave
    :alt: Travis CI Build Status
@@ -27,6 +24,10 @@ non-technical or business participants in a software project.
 code.
 
 First, `install *behave*.`_
+
+.. image:: docs/_static/behave_logo.png
+   :alt: Behave logo
+
 
 Now make a directory called "example". In that directory create a file
 called "example.feature" containing::
