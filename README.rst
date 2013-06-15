@@ -1,7 +1,7 @@
-======
 .. image:: docs/_static/behave_logo.png
    :alt: Behave logo
 
+======
 Behave
 ======
 
