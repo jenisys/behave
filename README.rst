@@ -1,6 +1,11 @@
-======
+==============================================================================
 Behave
-======
+
+.. image:: docs/_static/behave_logo.png
+    :alt: Behave logo
+    :align: right
+
+==============================================================================
 
 .. image:: https://travis-ci.org/jenisys/behave.png?branch=master
     :target: https://travis-ci.org/jenisys/behave
@@ -14,9 +19,6 @@ Behave
     :target: https://crate.io/packages/behave/
     :alt: Number of PyPI downloads
 
-.. image:: docs/_static/behave_logo.png
-    :alt: Behave logo
-    :align: right
 
 behave is behaviour-driven development, Python style.
 
