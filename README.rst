@@ -17,7 +17,7 @@ Behave
 
 behave is behaviour-driven development, Python style.
 
-.. image:: docs/_static/behave_logo.png
+.. image:: docs/_static/behave_logo1.png
     :alt: Behave logo
     :align: right
 
