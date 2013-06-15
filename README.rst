@@ -15,6 +15,7 @@ Behave
     :alt: Number of PyPI downloads
 
 .. |logo| image:: https://raw.github.com/jenisys/behave/master/docs/_static/behave_logo1.png
+            :align: right
 
 behave is behaviour-driven development, Python style. |logo|
 
