@@ -1,9 +1,9 @@
-.. image:: docs/_static/behave_logo.png
-   :alt: Behave logo
-
 ======
 Behave
 ======
+
+.. image:: docs/_static/behave_logo.png
+   :alt: Behave logo
 
 .. image:: https://travis-ci.org/jenisys/behave.png?branch=master
    :target: https://travis-ci.org/jenisys/behave
