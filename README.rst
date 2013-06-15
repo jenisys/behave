@@ -3,21 +3,24 @@ Behave
 ======
 
 .. image:: https://travis-ci.org/jenisys/behave.png?branch=master
-   :target: https://travis-ci.org/jenisys/behave
-   :alt: Travis CI Build Status
+    :target: https://travis-ci.org/jenisys/behave
+    :alt: Travis CI Build Status
+    :align: left top
 
 .. image:: https://pypip.in/v/behave/badge.png
     :target: https://crate.io/packages/behave/
     :alt: Latest PyPI version
+    :align: left top
 
 .. image:: https://pypip.in/d/behave/badge.png
     :target: https://crate.io/packages/behave/
     :alt: Number of PyPI downloads
+    :align: left top
 
 .. image:: docs/_static/behave_logo.png
-   :alt: Behave logo
-   :align: right
-   
+    :alt: Behave logo
+    :align: right top
+
 behave is behaviour-driven development, Python style.
 
 Behavior-driven development (or BDD) is an agile software development
