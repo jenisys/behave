@@ -1,10 +1,5 @@
 ==============================================================================
 Behave
-
-.. image:: docs/_static/behave_logo.png
-    :alt: Behave logo
-    :align: right
-
 ==============================================================================
 
 .. image:: https://travis-ci.org/jenisys/behave.png?branch=master
@@ -21,6 +16,10 @@ Behave
 
 
 behave is behaviour-driven development, Python style.
+
+.. image:: docs/_static/behave_logo.png
+    :alt: Behave logo
+    :align: right
 
 Behavior-driven development (or BDD) is an agile software development
 technique that encourages collaboration between developers, QA and
