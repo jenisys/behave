@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 # DISABLED, use VERSION.txt now: from behave.version import VERSION
 VERSION = open("VERSION.txt").read().strip()
 
-requirements = ['parse>=1.6', "distribute" ]
+requirements = ['parse>=1.6.2', , 'distribute' ]
 zip_safe = True
 major, minor = sys.version_info[:2]
 if major == 2 and minor < 7:
