@@ -1,10 +1,16 @@
+import os
 import sys
 
 from setuptools import find_packages, setup
 # DISABLED, use VERSION.txt now: from behave.version import VERSION
 VERSION = open("VERSION.txt").read().strip()
 
-requirements = ['parse>=1.6.2', 'setuptools>=0.7.5']
+if "TRAVIS_BUILD_ID" in os.environ:
+    # -- SAD: TRAVIS-CI only supports distribute 8-(
+    requirements = ['parse>=1.6.2', 'distribute']
+else:
+    requirements = ['parse>=1.6.2', 'setuptools>=0.7.5']
+
 zip_safe = True
 major, minor = sys.version_info[:2]
 if major == 2 and minor < 7:
