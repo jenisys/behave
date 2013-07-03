@@ -77,8 +77,10 @@ class JUnitReporter(Reporter):
             if feature.filename.startswith(path):
                 filename = feature.filename[len(path) + 1:]
                 break
-        if filename is None:
-            filename = os.path.split(feature.filename)[1]
+        if not filename:
+            # TODO: Directory path (subdirs) should be taken into account.
+            # filename = os.path.split(feature.filename)[1]
+            filename = os.path.basename(feature.filename)
         filename = filename.rsplit('.', 1)[0]
         filename = filename.replace('\\', '/').replace('/', '.')
         return filename
