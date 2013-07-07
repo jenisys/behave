@@ -9,11 +9,11 @@ Feature: Show missing Step Definitions
       """
       from behave import given, when, then
 
-      @given(u'I do something')
+      @given('I do something')
       def step(context):
           pass
 
-      @when(u'I do something')
+      @when('I do something')
       def step(context):
           pass
       """
@@ -40,13 +40,13 @@ Feature: Show missing Step Definitions
         """
         You can implement step definitions for undefined steps with these snippets:
         @given(u'I use an unknown step')
-        def impl(context):
+        def step_impl(context):
             assert False
         @when(u'I use an unknown step')
-        def impl(context):
+        def step_impl(context):
             assert False
         @then(u'I use an unknown step')
-        def impl(context):
+        def step_impl(context):
             assert False
         """
 
@@ -65,12 +65,12 @@ Feature: Show missing Step Definitions
         """
         You can implement step definitions for undefined steps with these snippets:
         @given(u'I use an unknown step')
-        def impl(context):
+        def step_impl(context):
             assert False
         """
     And the command output should contain:
         """
         @when(u'I use an unknown step')
-        def impl(context):
+        def step_impl(context):
             assert False
         """
