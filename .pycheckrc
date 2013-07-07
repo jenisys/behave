@@ -193,7 +193,7 @@ blacklist = ['Tkinter', 'wxPython', 'gtk', 'GTK', 'GDK']
 variablesToIgnore = ['__version__', '__warningregistry__', '__all__', '__credits__', '__test__', '__author__', '__email__', '__revision__', '__id__', '__copyright__', '__license__', '__date__']
 
 # ignore unused locals/arguments if name is one of these values
-unusedNames = ['_', 'empty', 'unused', 'dummy']
+unusedNames = ['_', 'empty', 'unused', 'dummy', 'crap']
 
 # ignore missing class attributes if name is one of these values
 missingAttrs = []
