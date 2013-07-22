@@ -417,6 +417,7 @@ class Runner(object):
             raise ConfigError('No steps directory in "%s"' % base_dir)
 
         base_dir = new_base_dir
+        self.config.base_dir = base_dir
 
         for dirpath, dirnames, filenames in os.walk(base_dir):
             if [fn for fn in filenames if fn.endswith('.feature')]:
