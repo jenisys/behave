@@ -108,8 +108,11 @@ class FileLocation(object):
     def __eq__(self, other):
         if isinstance(other, FileLocation):
             return self.filename == other.filename and self.line == other.line
-        else:
+        elif isinstance(other, basestring):
             return self.filename == other
+        else:
+            raise AttributeError("Cannot compare FileLocation with %s:%s" % \
+                                 (type(other), other))
 
     def __ne__(self, other):
         return not self == other
@@ -123,8 +126,11 @@ class FileLocation(object):
             else:
                 assert self.filename == other.filename
                 return self.line < other.line
-        else:
+        elif isinstance(other, basestring):
             return self.filename < other
+        else:
+            raise AttributeError("Cannot compare FileLocation with %s:%s" % \
+                                 (type(other), other))
 
     def __le__(self, other):
         # -- SEE ALSO: python2.7, functools.total_ordering
@@ -148,9 +154,7 @@ class FileLocation(object):
     def __str__(self):
         if self.line is None:
             return self.filename
-        else:
-            assert self.line >= 0
-            return u"%s:%d" % (self.filename, self.line)
+        return u"%s:%d" % (self.filename, self.line)
 
 
 class BasicStatement(object):
@@ -294,6 +298,7 @@ class Feature(TagStatement, Replayable):
     @property
     def status(self):
         skipped = True
+        passed_count = 0
         for scenario_or_outline in self.scenarios:
             # FIXME: Check if necessary, ScenarioOutline.status computes OK.
             if isinstance(scenario_or_outline, ScenarioOutline):
@@ -301,6 +306,8 @@ class Feature(TagStatement, Replayable):
                     if scenario.status == 'failed':
                         return 'failed'
                     if scenario.status == 'untested':
+                        if passed_count > 0:
+                            return 'failed'  # ABORTED: Some passed, ...
                         return 'untested'
                     if scenario.status != 'skipped':
                         skipped = False
@@ -309,9 +316,13 @@ class Feature(TagStatement, Replayable):
                 if scenario.status == 'failed':
                     return 'failed'
                 if scenario.status == 'untested':
+                    if passed_count > 0:
+                        return 'failed'  # ABORTED: Some passed, now untested.
                     return 'untested'
                 if scenario.status != 'skipped':
                     skipped = False
+            if scenario_or_outline.status == 'passed':
+                passed_count += 1
         return skipped and 'skipped' or 'passed'
 
     @property
@@ -394,10 +405,6 @@ class Feature(TagStatement, Replayable):
         assert self.status == "skipped"
 
     def run(self, runner):
-        # pylint: disable=W0212
-        #   W0212   Access to a protected member: runner.context._push()(._pop()
-        failed = False
-
         runner.context._push()
         runner.context.feature = self
 
@@ -430,10 +437,9 @@ class Feature(TagStatement, Replayable):
             failed = scenario.run(runner)
             if failed:
                 failed_count += 1
-
-            # do we want to stop on the first failure?
-            if failed and runner.config.stop:
-                break
+                if runner.config.stop or runner.aborted:
+                    # -- FAIL-EARLY: Stop after first failure.
+                    break
 
         if run_feature:
             runner.run_hook('after_feature', runner.context, self)
@@ -882,19 +888,18 @@ class ScenarioOutline(Scenario):
         assert self.status == "skipped"
 
     def run(self, runner):
-        # BAD: Better provide a public method and attribute.
-        # pylint: disable=W0212
-        #   W0212   Access to a protected member: _set_root_attribute(), _row
-        failed = False
+        failed_count = 0
+        for scenario in self.scenarios:
+            runner.context._set_root_attribute('active_outline', scenario._row)
+            failed = scenario.run(runner)
+            if failed:
+                failed_count += 1
+                if runner.config.stop or runner.aborted:
+                    # -- FAIL-EARLY: Stop after first failure.
+                    break
 
-        for sub in self.scenarios:
-            runner.context._set_root_attribute('active_outline', sub._row)
-            failed = sub.run(runner)
-            if failed and runner.config.stop:
-                return False
         runner.context._set_root_attribute('active_outline', None)
-
-        return failed
+        return failed_count > 0
 
 
 class Examples(BasicStatement, Replayable):
@@ -1034,6 +1039,10 @@ class Step(BasicStatement, Replayable):
         return result
 
     def run(self, runner, quiet=False, capture=True):
+        # -- RESET: Run information.
+        self.error_message = None
+        self.exception = None
+
         # access module var here to allow test mocking to work
         match = step_registry.registry.find_match(self)
         if match is None:
@@ -1075,6 +1084,11 @@ class Step(BasicStatement, Replayable):
             else:
                 # no assertion text; format the exception
                 error = traceback.format_exc()
+        except KeyboardInterrupt, e:
+            runner.aborted = True
+            error = u"ABORTED: By user (KeyboardInterrupt)."
+            self.status = 'failed'
+            self.exception = e
         except Exception, e:
             self.status = 'failed'
             error = traceback.format_exc()
@@ -1108,7 +1122,6 @@ class Step(BasicStatement, Replayable):
                 formatter.result(self)
 
         runner.run_hook('after_step', runner.context, self)
-
         return keep_going
 
 

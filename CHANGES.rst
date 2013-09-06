@@ -8,11 +8,23 @@ NEWS and CHANGES:
 
   - Running:
 
+    * ABORT-BY-USER: Better handle KeyboardInterrupt to abort a test run.
     * feature list files (formerly: feature configfiles) support wildcards.
+
+  - Formatters:
+
+    * steps.usage: Avoid duplicated steps usage due to Scenario Outlines.
+
 
 IMPROVEMENT:
 
   * issue #172: Subfolders in junit XML filenames (provided by: roignac).
+
+FIXED:
+
+  * issue #184: TypeError when running behave with --include option (provided by: s1ider).
+  * issue #186: ScenarioOutline uses wrong return value when if fails (provided by: mdavezac)
+  * issue #188: Better diagnostics if nested step is undefined
 
 
 Version: 1.2.3 (2013-07-08)

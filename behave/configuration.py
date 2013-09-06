@@ -6,6 +6,7 @@ import sys
 import argparse
 import ConfigParser
 
+from behave.model import FileLocation
 from behave.reporter.junit import JUnitReporter
 from behave.reporter.summary import SummaryReporter
 from behave.tag_expression import TagExpression
@@ -401,7 +402,7 @@ class Configuration(object):
         default_format="pretty",   # -- Used when no formatters are configured.
     )
 
-    def __init__(self):
+    def __init__(self, args=None):
         self.formatters = []
         self.reporters = []
         # -- MORE ATTRIBUTES:
@@ -420,8 +421,7 @@ class Configuration(object):
 
         load_configuration(self.defaults)
         parser.set_defaults(**self.defaults)
-
-        args = parser.parse_args()
+        args = parser.parse_args(args)
         for key, value in args.__dict__.items():
             if key.startswith('_'):
                 continue
@@ -498,6 +498,9 @@ class Configuration(object):
         return re.compile(pattern, flags=(re.UNICODE | re.LOCALE))
 
     def exclude(self, filename):
+        if isinstance(filename, FileLocation):
+            filename = str(filename)
+
         if self.include_re and self.include_re.search(filename) is None:
             return True
         if self.exclude_re and self.exclude_re.search(filename) is not None:
