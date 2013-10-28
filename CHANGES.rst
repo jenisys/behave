@@ -28,11 +28,13 @@ FIXED:
   * issue #143: Logging starts with a StreamHandler way too early (provided by: jtatum, jenisys).
   * issue #175: Scenario isn't marked as 'failed' when Background step fails
   * issue #177: Cannot setup logging_format
+  * issue #181: Escape apostrophes in undefined steps snippets
   * issue #184: TypeError when running behave with --include option (provided by: s1ider).
   * issue #186: ScenarioOutline uses wrong return value when if fails (provided by: mdavezac)
   * issue #188: Better diagnostics if nested step is undefined
   * issue #191: Using context.execute_steps() may change context.table/.text
   * issue #194: Nested steps prevent that original stdout/stderr is restored
+  * issue #199: behave tag expression bug when or-not logic is used
 
 
 Version: 1.2.3 (2013-07-08)
