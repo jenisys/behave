@@ -715,8 +715,8 @@ class TestRunWithPaths(object):
         self.runner.run_with_paths()
 
         eq_(self.run_hook.call_args_list, [
-            (('before_all', self.runner.context), {}),
             ((), {}),
+            (('before_all', self.runner.context), {}),
             (('after_all', self.runner.context), {}),
         ])
 

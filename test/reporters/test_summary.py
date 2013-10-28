@@ -60,7 +60,6 @@ class TestFormatStatus(unittest.TestCase):
         assert '2 failed' in output
         assert 'undefined' not in output
 
-
 class TestSummaryReporter(object):
     @patch('sys.stdout')
     def test_duration_is_totalled_up_and_outputted(self, stdout):

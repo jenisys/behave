@@ -12,7 +12,6 @@ from mock import Mock, patch
 from nose.tools import *
 from behave import step_registry
 
-
 class TestStepRegistry(object):
     def test_add_step_definition_adds_to_lowercased_keyword(self):
         registry = step_registry.StepRegistry()

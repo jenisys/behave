@@ -9,6 +9,7 @@
 #   W0614   Unused import ... from wildcard import
 
 from nose.tools import *
+
 from behave import i18n, model, parser
 
 class Common(object):

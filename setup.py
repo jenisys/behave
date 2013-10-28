@@ -1,26 +1,65 @@
-import os
+# -*- coding: utf-8 -*
+"""
+Setup script for behave.
+
+USAGE:
+    python setup.py install
+    python setup.py behave_test     # -- XFAIL on Windows (currently).
+    python setup.py nosetests
+"""
+
 import sys
+import os.path
+HERE0 = os.path.dirname(__file__) or os.curdir
+os.chdir(HERE0)
+HERE = os.curdir
+sys.path.insert(0, HERE)
 
 from setuptools import find_packages, setup
-# DISABLED, use VERSION.txt now: from behave.version import VERSION
-VERSION = open("VERSION.txt").read().strip()
+from setuptools_behave import behave_test
 
-if "TRAVIS_BUILD_ID" in os.environ:
-    # -- SAD: TRAVIS-CI only supports distribute 8-(
-    requirements = ['parse>=1.6.2', 'distribute']
-else:
-    requirements = ['parse>=1.6.2', 'setuptools>=0.7.5']
-
-zip_safe = True
-major, minor = sys.version_info[:2]
-if major == 2 and minor < 7:
+# -----------------------------------------------------------------------------
+# CONFIGURATION:
+# -----------------------------------------------------------------------------
+python_version = float("%s.%s" % sys.version_info[:2])
+requirements = ['parse>=1.6.3']
+if python_version < 2.7 or 3.0 <= python_version <= 3.1:
     requirements.append('argparse')
+if python_version < 2.7:
     requirements.append('importlib')
-if major == 2 and minor < 6:
+    requirements.append('ordereddict')
+if python_version < 2.6:
     requirements.append('simplejson')
 
-description = ''.join(open('README.rst').readlines()[5:])
+#if "TRAVIS_BUILD_ID" in os.environ:
+#    # -- SAD: TRAVIS-CI only supports distribute 8-(
+#    requirements.append('distribute')
+#else:
+#    requirements.append('setuptools>=0.7.5')
 
+BEHAVE = os.path.join(HERE, "behave")
+README = os.path.join(HERE, "README.rst")
+VERSION = open(os.path.join(HERE, "VERSION.txt")).read().strip()
+description = ''.join(open(README).readlines()[4:])
+
+# -----------------------------------------------------------------------------
+# UTILITY:
+# -----------------------------------------------------------------------------
+def find_packages_by_root_package(where):
+    """
+    Better than excluding everything that is not needed,
+    collect only what is needed.
+    """
+    root_package = os.path.basename(where)
+    packages = [ "%s.%s" % (root_package, sub_package)
+                 for sub_package in find_packages(where)]
+    packages.insert(0, root_package)
+    return packages
+
+
+# -----------------------------------------------------------------------------
+# SETUP:
+# -----------------------------------------------------------------------------
 setup(
     name='behave',
     version=VERSION,
@@ -29,14 +68,24 @@ setup(
     author='Benno Rice, Richard Jones and Jens Engel',
     author_email='behave-users@googlegroups.com',
     url='http://github.com/behave/behave',
-    packages=find_packages(exclude=[
-        "test", "test.*",
-        "behave4cmd0", "behave4cmd0.*"]),
+    provides = ["behave", "setuptools_behave"],
+    packages = find_packages_by_root_package(BEHAVE),
+    py_modules = ["setuptools_behave"],
     entry_points={
-        'console_scripts': ['behave = behave.__main__:main'],
+        'console_scripts': [
+            'behave = behave.__main__:main'
+        ],
+        'distutils.commands': [
+            'behave_test = setuptools_behave:behave_test'
+        ]
     },
     install_requires=requirements,
-    use_2to3=True,
+    test_suite='nose.collector',
+    tests_require=['nose>=1.3', 'mock>=1.0', 'PyHamcrest>=1.8'],
+    cmdclass = {
+        'behave_test': behave_test,
+    },
+    use_2to3= bool(python_version >= 3.0),
     license="BSD",
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -54,4 +103,7 @@ setup(
         "Topic :: Software Development :: Testing",
         "License :: OSI Approved :: BSD License",
     ],
+    zip_safe = True,
 )
+
+

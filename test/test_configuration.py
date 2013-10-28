@@ -8,6 +8,7 @@
 from __future__ import with_statement
 import os.path
 import tempfile
+
 from nose.tools import *
 from behave import configuration
 import unittest
