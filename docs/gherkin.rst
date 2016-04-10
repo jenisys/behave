@@ -21,7 +21,7 @@ Feature Testing Layout
 .. _`Python step implementations`: tutorial.html#python-step-implementations
 .. _`environmental controls`: tutorial.html#environmental-controls
 
-These files are typically stored in a firectory called "features". The
+These files are typically stored in a directory called "features". The
 minimum requirement for a features directory is::
 
   features/
@@ -83,16 +83,23 @@ line:
    tests/steps/website.py
    tests/steps/utils.py
 
+  Note that with this approach, if you want to execute *behave* without having
+  to explicitly specify the directory (first option) you can set the ``paths``
+  setting in your `configuration file`_ (e.g. ``paths=tests``).
+
 If you're having trouble setting things up and want to see what *behave* is
 doing in attempting to find your features use the "-v" (verbose)
 command-line switch.
 
+.. _`configuration file`: behave.html#configuration-files
+
+.. _chapter.gherkin:
 
 Gherkin: Feature Testing Language
 =================================
 
 *behave* `features`_ are written using a language called `Gherkin`_ (with
-with `some modifications`_) and are named "*name*.feature".
+`some modifications`_) and are named "*name*.feature".
 
 .. _`some modifications`: #modifications-to-the-gherkin-standard
 
@@ -161,11 +168,11 @@ humans reading the feature text.
 
 .. any other advice we could include here?
 
-The Background and Scenarios will be discussed in the following sections.
+The Background part and the Scenarios will be discussed in the following sections.
 
 
-Backgrounds
------------
+Background
+----------
 
 A background consists of a series of steps similar to `scenarios`_.
 It allows you to add some context to the scenarios of a feature.
@@ -181,6 +188,9 @@ The background description is for the benefit of humans reading the feature text
 Again the background name should just be a reasonably descriptive title
 for the background operation being performed or requirement being met.
 
+A background section may exist only once within a feature file.
+In addition, a background must be defined before any scenario or
+scenario outline.
 
 It contains `steps`_ as described below.
 
@@ -361,9 +371,10 @@ Examples:
 - Developing a library? Kicking off some kind of action that has an
   observable effect somewhere else.
 
-.. _`requests`: http://python-requests.org/
-.. _`twill`: http://twill.idyll.org/
-.. _`selenium`: http://seleniumhq.org/projects/webdriver/
+.. _`requests`: http://docs.python-requests.org/en/latest/
+.. _`twill`:    http://twill.idyll.org/
+.. _`selenium`: http://docs.seleniumhq.org/projects/webdriver/
+
 
 Then
 """"
@@ -411,7 +422,7 @@ Or you can make it read more fluently by writing:
      Then I see something
       But I don't see something else
 
-The two scenarios are identical to *bevave* - steps beginning with "and" or
+The two scenarios are identical to *behave* - steps beginning with "and" or
 "but" are exactly the same kind of steps as all the others. They simply
 mimic the step that preceeds them.
 
@@ -468,7 +479,7 @@ You may associate a table of data with a step by simply entering it,
 indented, following the step. This can be useful for loading specific
 required data into a model.
 
-The table formatting doesn't have to be stricltly lined up but it does need
+The table formatting doesn't have to be strictly lined up but it does need
 to have the same number of columns on each line. A column is anything
 appearing between two vertical bars "|". Any whitespace between the column
 content and the vertical bar is removed.
@@ -480,8 +491,8 @@ content and the vertical bar is removed.
         | name      | department  |
         | Barry     | Beer Cans   |
         | Pudey     | Silly Walks |
-        | Two-Lumps | Silly Walks | 
- 
+        | Two-Lumps | Silly Walks |
+
     When we count the number of people in each department
     Then we will find two people in "Silly Walks"
      But we will find one person in "Beer Cans"
@@ -516,17 +527,26 @@ Tags appear on the line preceding the feature or scenario you wish to tag.
 You may have many space-separated tags on a single line.
 
 A tag takes the form of the at symbol "@" followed by a word (which may
-include underscores "_"). Valid tag lines include:
+include underscores "_"). Valid tag lines include::
 
-   @slow
-   @wip
-   @needs_database @slow
+    @slow
+    @wip
+    @needs_database @slow
 
 For example:
 
 .. code-block:: gherkin
 
    @wip @slow
+   Feature: annual reporting
+     Some description of a slow reporting system.
+
+or:
+
+.. code-block:: gherkin
+
+   @wip
+   @slow
    Feature: annual reporting
      Some description of a slow reporting system.
 
@@ -548,20 +568,20 @@ Given a feature file with:
   Feature: Fight or flight
     In order to increase the ninja survival rate,
     As a ninja commander
-    I want my ninjas to decide whether to take on an 
+    I want my ninjas to decide whether to take on an
     opponent based on their skill levels
 
     @slow
     Scenario: Weaker opponent
-      Given the ninja has a third level black-belt 
+      Given the ninja has a third level black-belt
       When attacked by a samurai
       Then the ninja should engage the opponent
 
     Scenario: Stronger opponent
-      Given the ninja has a third level black-belt 
+      Given the ninja has a third level black-belt
       When attacked by Chuck Norris
       Then the ninja should run for his life
-      
+
 then running ``behave --tags=slow`` will run just the scenarios tagged
 ``@slow``. If you wish to check everything *except* the slow ones then you
 may run ``behave --tags=-slow``.

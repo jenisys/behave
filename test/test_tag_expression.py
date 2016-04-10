@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=C0103,R0201,W0401,W0614,W0621
-#   C0103   Invalid name (setUp(), ...)
-#   R0201   Method could be a function
-#   W0401   Wildcard import
-#   W0614   Unused import ... from wildcard import
-#   W0621   Redefining name ... from outer scope
 
+from __future__ import absolute_import
 from behave.tag_expression import TagExpression
 from nose import tools
 import unittest
@@ -503,41 +498,9 @@ class TestTagExpressionTagLimits(unittest.TestCase):
         tools.eq_(e.limits, {'todo': 3})
 
     def test_should_raise_an_error_for_inconsistent_limits(self):
-        # pylint: disable=E1101
-        #   E1101   Module nose.tools has no assert_raises member
-        #           => But it works.
         tools.assert_raises(Exception, TagExpression, ['todo:3', '-todo:4'])
 
     def test_should_allow_duplicate_consistent_limits(self):
         e = TagExpression(['todo:3', '-todo:3'])
         tools.eq_(e.limits, {'todo': 3})
-
-# ----------------------------------------------------------------------------
-# TAG EXPRESSIONS WITH TILDE:
-# ----------------------------------------------------------------------------
-# Tag expressions with tilde instead of minus are documented and returned
-# by --tag-help option, but where not implemented (or tested).
-# ----------------------------------------------------------------------------
-class TestTagExpressionNotFooWithTilde(unittest.TestCase):
-    def setUp(self):
-        self.e = TagExpression(['~foo'])
-
-    def test_should_match_bar(self):
-        assert self.e.check(['bar'])
-
-    def test_should_not_match_foo(self):
-        assert not self.e.check(['foo'])
-
-class TestTagExpressionFooOrBarAndNotZapWithTilde(unittest.TestCase):
-    def setUp(self):
-        self.e = TagExpression(['foo,bar', '~zap'])
-
-    def test_should_match_foo(self):
-        assert self.e.check(['foo'])
-
-    def test_should_not_match_zap(self):
-        assert not self.e.check(['zap'])
-
-    def test_should_not_match_foo_zap(self):
-        assert not self.e.check(['foo', 'zap'])
 

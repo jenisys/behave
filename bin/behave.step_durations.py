@@ -7,16 +7,18 @@ REQUIRES: Python >= 2.6 (json module is part of Python standard library)
 LICENSE:  BSD
 """
 
+from __future__ import absolute_import
+
 __author__    = "Jens Engel"
 __copyright__ = "(c) 2013 by Jens Engel"
 __license__   = "BSD"
 VERSION = "0.1.0"
 
-
 # -- IMPORTS:
 from behave import json_parser
 from behave.model import ScenarioOutline
-from   optparse import OptionParser
+from optparse import OptionParser
+from operator import attrgetter
 import os.path
 import sys
 
@@ -93,10 +95,11 @@ class BehaveDurationData(object):
             self.process_scenario(scenario)
 
     def report_step_durations(self, limit=None, min_duration=None, ostream=sys.stdout):
-        step_datas = self.step_registry.values()
+        step_datas = list(self.step_registry.values())
         steps_size = len(step_datas)
-        compare = lambda x, y: cmp(x.max_duration, y.max_duration)
-        steps_by_longest_duration_first = sorted(step_datas, compare, reverse=True)
+        steps_by_longest_duration_first = sorted(step_datas,
+                                                 key=attrgetter("max_duration"),
+                                                 reverse=True)
         ostream.write("STEP DURATIONS (longest first, size=%d):\n" % steps_size)
         ostream.write("-" * 80)
         ostream.write("\n")

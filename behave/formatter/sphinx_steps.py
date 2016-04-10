@@ -10,15 +10,29 @@ TODO:
 
 .. seealso::
     http://sphinx-doc.org/
+
+.. note:: REQUIRES docutils
+    :mod:`docutils` are needed to generate step-label for step references.
 """
 
+from __future__ import absolute_import, print_function
 from behave.formatter.steps import AbstractStepsFormatter
 from behave.formatter import sphinx_util
-from behave.compat.os_path import relpath
 from behave.model import Table
+from operator import attrgetter
 import inspect
 import os.path
 import sys
+
+try:
+    # -- SAFETY-NET:
+    import docutils
+    has_docutils = True
+
+    # -- NEEDED FOR: step-labels (and step-refs)
+    from docutils.nodes import fully_normalize_name
+except ImportError:
+    has_docutils = False
 
 
 # -----------------------------------------------------------------------------
@@ -56,7 +70,7 @@ class StepsModule(object):
         if not self._filename:
             if self.step_definitions:
                 filename = inspect.getfile(self.step_definitions[0].func)
-                self._filename = relpath(filename)
+                self._filename = os.path.relpath(filename)
         return self._filename
 
     @property
@@ -101,6 +115,7 @@ class SphinxStepsDocumentGenerator(object):
     shows_step_module_info = True
     shows_step_module_overview = True
     make_step_index_entries = True
+    make_step_labels = has_docutils
 
     document_separator = "# -- DOCUMENT-END " + "-" * 60
     step_document_prefix = "step_module."
@@ -137,7 +152,7 @@ class SphinxStepsDocumentGenerator(object):
     def ensure_destdir_exists(self):
         assert self.destdir
         if os.path.isfile(self.destdir):
-            print "OOPS: remove %s" % self.destdir
+            print("OOPS: remove %s" % self.destdir)
             os.remove(self.destdir)
         if not os.path.exists(self.destdir):
             os.makedirs(self.destdir)
@@ -162,11 +177,10 @@ class SphinxStepsDocumentGenerator(object):
                 step_modules_map[step_filename] = step_module
             step_module.append(step_definition)
 
-        compare_name = lambda x, y: cmp(x.name, y.name)
-        compare_location = lambda x, y: cmp(x.location, y.location)
-        step_modules = sorted(step_modules_map.values(), compare_name)
+        step_modules = sorted(step_modules_map.values(), key=attrgetter("name"))
         for module in step_modules:
-            step_definitions = sorted(module.step_definitions, compare_location)
+            step_definitions = sorted(module.step_definitions,
+                                      key=attrgetter("location"))
             module.step_definitions = step_definitions
         return step_modules
 
@@ -287,12 +301,20 @@ The following step definitions are provided here.
             index_id = self.make_step_definition_index_id(step_definition)
 
         heading = step_text
+        step_label = None
         if self.step_heading_prefix:
             heading = self.step_heading_prefix + step_text
-        self.document.write_heading(heading, level=2, index_id=index_id)
+        if has_docutils and self.make_step_labels:
+            # -- ADD STEP-LABEL (supports: step-refs by name)
+            # EXAMPLE: See also :ref:`When my step does "{something}"`.
+            step_label = fully_normalize_name(step_text)
+            # SKIP-HERE: self.document.write(".. _%s:\n\n" % step_label)
+        self.document.write_heading(heading, level=2, index_id=index_id, 
+                                    label=step_label)
         step_definition_doc = self.make_step_definition_doc(step_definition)
         self.document.write("%s\n" % step_definition_doc)
         self.document.write("\n")
+
 
 
 # -----------------------------------------------------------------------------

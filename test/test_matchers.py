@@ -1,26 +1,21 @@
-# -*- coding: utf-8 -*-
-# pylint: disable=C0103,R0201,W0401,W0614
-#   C0103   Invalid name (setUp(), ...)
-#   R0201   Method could be a function
-#   W0401   Wildcard import
-#   W0614   Unused import ... from wildcard import
-
-from __future__ import with_statement
-
+# -*- coding: UTF-8 -*-
+from __future__ import absolute_import, with_statement
 from mock import Mock, patch
-from nose.tools import *
+from nose.tools import *  # pylint: disable=wildcard-import, unused-wildcard-import
 import parse
-from behave import matchers, model, runner
-import unittest
+from behave.matchers import Match, Matcher, ParseMatcher, RegexMatcher
+from behave import matchers, runner
 
-class DummyMatcher(matchers.Matcher):
+
+class DummyMatcher(Matcher):
     desired_result = None
 
     def check_match(self, step):
-        __pychecker__ = "unusednames=step"
         return DummyMatcher.desired_result
 
-class TestMatcher(unittest.TestCase):
+class TestMatcher(object):
+    # pylint: disable=invalid-name, no-self-use
+
     def setUp(self):
         DummyMatcher.desired_result = None
 
@@ -36,11 +31,13 @@ class TestMatcher(unittest.TestCase):
         matcher = DummyMatcher(func, None)
 
         match = matcher.match('just a random step')
-        assert isinstance(match, model.Match)
+        assert isinstance(match, Match)
         assert match.func is func
         assert match.arguments == arguments
 
-class TestParseMatcher(unittest.TestCase):
+class TestParseMatcher(object):
+    # pylint: disable=invalid-name, no-self-use
+
     def setUp(self):
         self.recorded_args = None
 
@@ -48,16 +45,16 @@ class TestParseMatcher(unittest.TestCase):
         self.recorded_args = (args, kwargs)
 
     def test_returns_none_if_parser_does_not_match(self):
-        # pylint: disable=W0621
-        #   W0621   Redefining name ... from outer scope.
-        matcher = matchers.ParseMatcher(None, 'a string')
+        # pylint: disable=redefined-outer-name
+        # REASON: parse
+        matcher = ParseMatcher(None, 'a string')
         with patch.object(matcher.parser, 'parse') as parse:
             parse.return_value = None
             assert matcher.match('just a random step') is None
 
     def test_returns_arguments_based_on_matches(self):
         func = lambda x: -x
-        matcher = matchers.ParseMatcher(func, 'foo')
+        matcher = ParseMatcher(func, 'foo')
 
         results = parse.Result([1, 2, 3], {'foo': 'bar', 'baz': -45.3},
                                {
@@ -86,7 +83,7 @@ class TestParseMatcher(unittest.TestCase):
 
     def test_named_arguments(self):
         text = "has a {string}, an {integer:d} and a {decimal:f}"
-        matcher = matchers.ParseMatcher(self.record_args, text)
+        matcher = ParseMatcher(self.record_args, text)
         context = runner.Context(Mock())
 
         m = matcher.match("has a foo, an 11 and a 3.14159")
@@ -99,27 +96,26 @@ class TestParseMatcher(unittest.TestCase):
 
     def test_positional_arguments(self):
         text = "has a {}, an {:d} and a {:f}"
-        matcher = matchers.ParseMatcher(self.record_args, text)
+        matcher = ParseMatcher(self.record_args, text)
         context = runner.Context(Mock())
 
         m = matcher.match("has a foo, an 11 and a 3.14159")
         m.run(context)
         eq_(self.recorded_args, ((context, 'foo', 11, 3.14159), {}))
 
-class TestRegexMatcher(unittest.TestCase):
+class TestRegexMatcher(object):
+    # pylint: disable=invalid-name, no-self-use
 
     def test_returns_none_if_regex_does_not_match(self):
-        __pychecker__ = "missingattrs=regex.match"
-        matcher = matchers.RegexMatcher(None, 'a string')
+        matcher = RegexMatcher(None, 'a string')
         regex = Mock()
         regex.match.return_value = None
         matcher.regex = regex
         assert matcher.match('just a random step') is None
 
     def test_returns_arguments_based_on_groups(self):
-        __pychecker__ = "missingattrs=match,groups,start,end"
         func = lambda x: -x
-        matcher = matchers.RegexMatcher(func, 'foo')
+        matcher = RegexMatcher(func, 'foo')
 
         regex = Mock()
         regex.groupindex = {'foo': 4, 'baz': 5}
@@ -153,10 +149,43 @@ class TestRegexMatcher(unittest.TestCase):
         have = [(a.start, a.end, a.original, a.value, a.name) for a in args]
         eq_(have, expected)
 
+    def test_steps_with_same_prefix_are_not_ordering_sensitive(self):
+        # -- RELATED-TO: issue #280
+        # pylint: disable=unused-argument
+        def step_func1(context): pass   # pylint: disable=multiple-statements
+        def step_func2(context): pass   # pylint: disable=multiple-statements
+        # pylint: enable=unused-argument
+        matcher1 = RegexMatcher(step_func1, "I do something")
+        matcher2 = RegexMatcher(step_func2, "I do something more")
+
+        # -- CHECK: ORDERING SENSITIVITY
+        matched1 = matcher1.match(matcher2.string)
+        matched2 = matcher2.match(matcher1.string)
+        assert matched1 is None
+        assert matched2 is None
+
+        # -- CHECK: Can match itself (if step text is simple)
+        matched1 = matcher1.match(matcher1.string)
+        matched2 = matcher2.match(matcher2.string)
+        assert isinstance(matched1, Match)
+        assert isinstance(matched2, Match)
+
+    @raises(AssertionError)
+    def test_step_should_not_use_regex_begin_marker(self):
+        RegexMatcher(None, "^I do something")
+
+    @raises(AssertionError)
+    def test_step_should_not_use_regex_end_marker(self):
+        RegexMatcher(None, "I do something$")
+
+    @raises(AssertionError)
+    def test_step_should_not_use_regex_begin_and_end_marker(self):
+        RegexMatcher(None, "^I do something$")
+
+
 def test_step_matcher_current_matcher():
     current_matcher = matchers.current_matcher
-
-    for name, klass in matchers.matcher_mapping.items():
+    for name, klass in list(matchers.matcher_mapping.items()):
         matchers.use_step_matcher(name)
         matcher = matchers.get_matcher(lambda x: -x, 'foo')
         assert isinstance(matcher, klass)

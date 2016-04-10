@@ -1,21 +1,20 @@
-====================
-behave API reference
-====================
+.. _api:
 
-.. if you change any headings in here make sure you haven't broken the
-   cross-references in the API documentation or module docstrings!
+====================
+Behave API Reference
+====================
 
 This reference is meant for people actually writing step implementations
 for feature tests. It contains way more information than a typical step
 implementation will need: most implementations will only need to look at
-the basic implementation of `step functions`_ and *maybe* `environment file
-functions`_.
+the basic implementation of `step functions`_ and *maybe*
+`environment file functions`_.
 
 The model stuff is for people getting really *serious* about their step
 implementations.
 
 .. note::
-   
+
    Anywhere this document says "string" it means "unicode string" in
    Python 2.x
 
@@ -65,7 +64,7 @@ will match the "Given" step from the following feature:
    then some observed outcome.
 
 *You don't need to import the decorators*: they're automatically available
-to your step implmentation modules as `global variables`_.
+to your step implementation modules as `global variables`_.
 
 .. _`global variables`: #step-global-variables
 
@@ -88,7 +87,7 @@ will look for a step implementation decorated with either "given" or "step":
   @given('some other known state')
   def step_impl(context):
      set_up(some, other, state)
-      
+
 and similarly the "but" would be renamed internally to "then". Multiple
 "and" or "but" steps in a row would inherit the non-"and" or "but" keyword.
 
@@ -101,29 +100,33 @@ Step Parameters
 ---------------
 
 You may additionally use `parameters`_ in your step names. These will be
-handled by either the default `simple parser`_ or by regular expressions if
-you invoke :func:`~behave.matchers.step_matcher`.
+handled by either the default simple parser (:pypi:`parse`),
+its extension "cfparse" or by regular expressions
+if you invoke :func:`~behave.use_step_matcher`.
 
 .. _`parameters`: tutorial.html#step-parameters
-.. _`simple parser`: http://pypi.python.org/pypi/parse
 
-.. autofunction:: behave.matchers.step_matcher
 
-You may add new types to the default parser by invoking 
-:func:`~behave.matchers.register_type`.
+.. autofunction:: behave.use_step_matcher
 
-.. autofunction:: behave.matchers.register_type
+You may add new types to the default parser by invoking
+:func:`~behave.register_type`.
 
-An example of this in action could be, in steps.py:
+.. autofunction:: behave.register_type
 
-.. code-block:: python
+.. hidden:
 
-    from behave.matchers import register_type
-    register_type(custom=lambda s: s.upper())
+    # -- SUPERCEEDED BY: behave.register_type documentation
+    An example of this in action could be, in steps.py:
 
-    @given('a string {param:custom} a custom type')
-    def step_impl(context, param):
-        assert param.isupper()
+    .. code-block:: python
+
+        from behave import register_type
+        register_type(custom=lambda s: s.upper())
+
+        @given('a string {param:custom} a custom type')
+        def step_impl(context, param):
+            assert param.isupper()
 
 You may define a new parameter matcher by subclassing
 :class:`behave.matchers.Matcher` and registering it with
@@ -133,9 +136,9 @@ name" to :class:`~behave.matchers.Matcher` class.
 .. autoclass:: behave.matchers.Matcher
    :members:
 
-.. autoclass:: behave.model.Argument
+.. autoclass:: behave.model_core.Argument
 
-.. autoclass:: behave.model.Match
+.. autoclass:: behave.matchers.Match
 
 
 Calling Steps From Other Steps
@@ -151,7 +154,7 @@ This function allows you to, for example:
 
     @when('I do the same thing as before')
     def step_impl(context):
-        context.execute_steps('''
+        context.execute_steps(u'''
             when I press the big red button
              and I duck
         ''')
@@ -171,14 +174,16 @@ The import statement:
 
 is written to introduce a restricted set of variables into your code:
 
-**given**, **when**, **then**, **step**
-  These are the decorators used to identify implementations.
+ =========================== =========== ===========================================
+ Name                        Kind        Description
+ =========================== =========== ===========================================
+ given, when, then, step     Decorator   Decorators for step implementations.
+ use_step_matcher(name)      Function    Selects current step matcher (parser).
+ register_type(Type=func)    Function    Registers a type converter.
+ =========================== =========== ===========================================
 
-**Given**, **When**, **Then**, **Step**
-  See above.
+See also the description in `step parameters`_.
 
-**step_matcher**
-  This is described in `step parameters`_.
 
 
 Environment File Functions
@@ -202,14 +207,19 @@ events during your testing:
 **before_tag(context, tag), after_tag(context, tag)**
   These run before and after a section tagged with the given name. They are
   invoked for each tag encountered in the order they're found in the
-  feature file. See  `controlling things with tags`_. The tag passed in is
+  feature file. See  :ref:`controlling things with tags`. The tag passed in is
   an instance of :class:`~behave.model.Tag` and because it's a subclass of
   string you can do simple tests like:
 
   .. code-block:: python
 
-     if tag == 'browser':
-         context.browser = webdriver.Chrome()
+     # -- ASSUMING: tags @browser.chrome or @browser.any are used.
+     if tag.startswith("browser."):
+         browser_type = tag.replace("browser.", "", 1)
+         if browser_type == "chrome":
+            context.browser = webdriver.Chrome()
+         else:
+            context.browser = webdriver.PlainVanilla()
 
 **before_all(context), after_all(context)**
   These run before and after the whole shooting match.
@@ -219,38 +229,46 @@ Some Useful Environment Ideas
 
 Here's some ideas for things you could use the environment for.
 
-1. Setting up basic logging configuration for when you've turned off
-   logging capture by *behave*:
+Logging Setup
+~~~~~~~~~~~~~~
 
-   .. code-block:: python
-    
-      import logging
+The following recipe works in all cases (log-capture on or off).
+If you want to use/configure logging, you should use the following snippet:
 
-      def before_all(context):
-          if not context.config.log_capture:
-              logging.basicConfig(level=logging.DEBUG)
+.. code-block:: python
 
-   Note that you could also achieve this through always configuring basic
-   logging and then using the ``--logging-clear-handlers`` command-line
-   argument, but we think the above is a little nicer.
+    # -- FILE:features/environment.py
+    def before_all(context):
+        # -- SET LOG LEVEL: behave --logging-level=ERROR ...
+        # on behave command-line or in "behave.ini".
+        context.config.setup_logging()
 
-   Also if you wish to capture any logging generated during an environment
-   hook function's invocation you may use the
-   :func:`~behave.log_capture.capture` decorator, like so:
+        # -- ALTERNATIVE: Setup logging with a configuration file.
+        # context.config.setup_logging(configfile="behave_logging.ini")
 
-   .. code-block:: python
 
-      from behave.log_capture import capture
-     
-      @capture
-      def after_scenario(context):
-          ...
+Capture Logging in Hooks
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-   This will capture any logging done during the call to *after_scenario*
-   and print it out.
+If you wish to capture any logging generated during an environment
+hook function's invocation, you may use the
+:func:`~behave.log_capture.capture` decorator, like:
 
-2. TODO
+.. code-block:: python
 
+    # -- FILE:features/environment.py
+    from behave.log_capture import capture
+
+    @capture
+    def after_scenario(context):
+        ...
+
+This will capture any logging done during the call to *after_scenario*
+and print it out.
+
+
+Detecting that user code overwrites behave Context attributes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The *context* variable in all cases is an instance of
 :class:`behave.runner.Context`.
@@ -279,10 +297,10 @@ which that code is invoked (if they exist.)
                     step.run()
                 after_step
             after_scenario
-        after_feature         
+        after_feature
     after_all
-  
-If the feature contains scenario outlines then there is an addtional loop
+
+If the feature contains scenario outlines then there is an additional loop
 over all the scenarios in the outline making the running look like this:
 
 .. parsed-literal::
@@ -298,7 +316,7 @@ over all the scenarios in the outline making the running look like this:
                         step.run()
                     after_step
                 after_scenario
-        after_feature         
+        after_feature
     after_all
 
 
@@ -309,11 +327,13 @@ The feature, scenario and step objects represent the information parsed
 from the feature file. They have a number of common attributes:
 
 **keyword**
-  "Feature", "Scenario", "Given", etc.
+    "Feature", "Scenario", "Given", etc.
+
 **name**
-  The name of the step (the text after the keyword.)
+    The name of the step (the text after the keyword.)
+
 **filename** and **line**
-  The file name (or "<string>") and line number of the statement.
+    The file name (or "<string>") and line number of the statement.
 
 The structure of model objects parsed from a *feature file* will typically
 be:
@@ -370,15 +390,13 @@ And Text may be associated with Steps:
 
 .. autoclass:: behave.model.Text
 
-.. _`controlling things with tags`: tutorial.html#controlling-things-with-tags
-
 
 
 Logging Capture
 ===============
 
 The logging capture *behave* uses by default is implemented by the class
-:class:`~behave.log_capture.LoggingCapture`. It has methods 
+:class:`~behave.log_capture.LoggingCapture`. It has methods
 
 .. autoclass:: behave.log_capture.LoggingCapture
    :members:

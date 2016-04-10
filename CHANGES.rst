@@ -1,8 +1,142 @@
 Version History
 ===============================================================================
 
-Version: 1.2.4a1 (unreleased)
+Version: 1.2.6 (unreleased)
 -------------------------------------------------------------------------------
+
+GOALS:
+
+  - Improve support for Windows
+
+DOCUMENTATION:
+
+  * pull  #379: Correct wording in README.rst (provided by: franklinchou)
+  * pull  #362: docs/tutorial.rst: fixed non-monospace font (provided by: spacediver)
+  * pull  #359: Update documentation related to Django (behave-django) (provided by: bittner)
+  * pull  #326: docs/tutorial.rst: Correct features directory path creation (provided by: memee)
+  * issue #356: docs/api.rst: type in implementation (submitted by: tomxtobin)
+  * pull  #335: docs/api.rst: execute_steps() example (provided by: miabbott)
+  * pull  #339: Adapt wording in install.rst (provided by: charleswhchan)
+  * pull  #338: docs/philosophy.rst: Correct to uppercase in example (provided by: charleswhchan)
+  * pull  #327: Fix typo in Django doc (provided by: nikolas)
+  * pull  #321: Update Django integration (provided by: bittner, contains: #315, #316)
+  * FIX: cmdline/config-param doc-generator, avoid duplicated param entries (related to: #318)
+  * issue #317: Update comparison: lettuce tags (provided by: ramiabughazaleh)
+  * pull  #307: Typo in readme (provided by: dflock)
+  * pull  #305: behave.rst related fixes reapplied (provided by: bittner)
+  * pull  #292: Use title-cased keywords in tutorial scenario (provided by: neoblackcap)
+  * pull  #291: Tiny tweaks in tutorial docs (provided by: bernardpaulus)
+
+ENHANCEMENTS:
+
+  * Tagged Examples: Examples in a ScenarioOutline can now have tags.
+  * issue #411: Support multiple active-tags with same category (submitted by: Kani999)
+  * issue #409: Support async/@asyncio.coroutine steps (submitted by: dcarp)
+  * issue #357: Add language attribute to Feature class
+  * pull  #328: Auto-retry failed scenarios in unreliable environment (provided by: MihaiBalint, robertknight)
+  * issue #302: Support escaped-pipe in Gherkin table cell value (provided by: connorsml, pull #360)
+  * issue #301: Support default tags in configfile
+  * issue #299: Runner can continue after a failed step (same as: #314)
+  * issue #197: Hooks processing should be more exception safe (provided by: vrutkovs, jenisys, pull #205)
+
+FORMATTERS:
+
+  * pull #423: sphinx.steps: Support ref link for each step (provided by: ZivThaller)
+
+CHANGES:
+
+  * parser: language comment in feature file has higher priority than --lang option (related to: #334).
+
+FIXED:
+
+  * issue #414: Support for Jython 2.7 (submitted by: gabtwi...)
+  * issue #384: Active Tags fail with ScenarioOutline (submitted by: BRevzin)
+  * issue #383: Handle (custom) Type parsing errors better (submitted by: zsoldosp)
+  * pull  #382: fix typo in tag name (provided by: zsoldosp)
+  * issue #361: utf8 file with BOM (provided by: karulis)
+  * issue #349: ScenarioOutline skipped with --format=json
+  * issue #330: Skipped scenarios are included in junit reports when --no-skipped is specified (provided by: vrutkovs, pull #331)
+  * issue #320: Userdata is case-insensitive when read from config file (provided by: mixxorz)
+  * issue #319: python-version requirements in behave.whl for Python2.6 (submitted by: darkfoxprime)
+  * issue #310: Use setuptools_behave.py with behave module
+  * issue #309: behave --lang-list fails on Python3 (and Python2)
+  * issue #300: UnicodeDecodeError when read steps.py (similar to: #361)
+  * issue #288: Use print function instead print statement in environment/steps files
+
+
+Version: 1.2.5 (2015-01-31)
+-------------------------------------------------------------------------------
+
+:Same as: Version 1.2.5a1 (unreleased).
+
+NEWS and CHANGES:
+
+  - General:
+
+    * Improve support for Python3 (py3.3, py3.4; #268)
+    * Various unicode related fixes (Unicode errors with non-ASCII, etc.)
+    * Drop support for Python 2.5
+
+  - Running:
+
+    * ScenarioOutline: Annotates name with row.id, ... to better represent row.
+    * NEW: Active Tags, see docs (`New and Noteworthy`_).
+    * NEW: Test stages, see docs (`New and Noteworthy`_).
+    * NEW: User-specific configuration data, see docs (`New and Noteworthy`_).
+    * CHANGED: Undefined step snippet uses now NotImplementedError (related to: #254)
+
+  - Model:
+
+    * ScenarioOutline: Various improvements, see docs (`New and Noteworthy`_).
+
+  - Formatters:
+
+    * plain: Can now show tags, but currently disabled per default
+    * NEW: steps.catalog: Readable summary of all steps (similar to: steps.doc, #271)
+    * NEW: User-defined formatters, see docs (`New and Noteworthy`_).
+
+ENHANCEMENTS:
+
+  * pull #285: Travis CI improvements to use container environment, etc. (provided by: thedrow)
+  * pull #272: Use option role to format command line arg docs (provided by: helenst)
+  * pull #271: Provide steps.catalog formatter (provided by: berdroid)
+  * pull #261: Support "setup.cfg" as configuration file, too (provided by: bittner)
+  * pull #260: Documentation tweaks and typo fixes (provided by: bittner)
+  * pull #254: Undefined step raises NotImplementedError instead of assert False (provided by: mhfrantz)
+  * issue #242: JUnitReporter can show scenario tags (provided by: rigomes)
+  * issue #240: Test Stages with different step implementations (provided by: attilammagyar, jenisys)
+  * issue #238: Allow to skip scenario in step function (provided by: hotgloupi, jenisys)
+  * issue #228: Exclude scenario fron run (provided by: jdeppe, jenisys)
+  * issue #227: Add a way to add command line options to behave (provided by: attilammagyar, jenisys)
+
+FIXED:
+
+  * pull  #283: Fix "fork me" image in docs (provided by: frodopwns)
+  * issue #280: Fix missing begin/end-markers in RegexMatcher (provided by: tomekwszelaki, jenisys)
+  * pull  #268: Fix py3 compatibility with all tests passed (provided by: sunliwen)
+  * pull  #252: Related to #251 (provided by: mcepl)
+  * pull  #190: UnicodeDecodeError in tracebacks (provided by: b3ni, vrutkovs, related to: #226, #230)
+  * issue #257: Fix JUnitReporter (XML) for Python3 (provided by: actionless)
+  * issue #249: Fix a number of docstring problems (provided by: masak)
+  * issue #253: Various problems in PrettyFormatter.exception()
+  * issue #251: Unicode crash in model.py (provided by: mcepl, jenisys)
+  * issue #236: Command line docs are confusing (solved by: #272)
+  * issue #230: problem with assert message that contains ascii over 128 value (provided by: jenisys)
+  * issue #226: UnicodeDecodeError in tracebacks (provided by: md1023, karulis, jenisys)
+  * issue #221: Fix some PY2/PY3 incompatibilities (provided by: johbo)
+  * pull  #219: IDE's unknown modules import issue (provided by: xbx)
+  * issue #216: Using --wip option does not disable ANSI escape sequences (coloring).
+  * issue #119: Python3 support for behave (solved by: #268 and ...)
+  * issue #82:  JUnitReporter fails with Python 3.x (fixed with: #257, #268)
+
+
+.. _`New and Noteworthy`: https://github.com/behave/behave/blob/master/docs/new_and_noteworthy.rst
+
+
+Version: 1.2.4 (2014-03-02)
+-------------------------------------------------------------------------------
+
+:Same as: Version 1.2.4a1 (unreleased).
 
 NEWS and CHANGES:
 
@@ -12,15 +146,21 @@ NEWS and CHANGES:
     * feature list files (formerly: feature configfiles) support wildcards.
     * Simplify and improve setup of logging subsystem (related to: #143, #177)
 
+  - Step matchers:
+
+    * cfparse: Step matcher with "Cardinality Field" support (was: optional).
+
   - Formatters:
 
     * steps.usage: Avoid duplicated steps usage due to Scenario Outlines.
+    * json: Ensures now that matched step params (match args) cause valid JSON.
 
 
 IMPROVEMENT:
 
   * issue #108: behave.main() can be called with command-line args (provided by: medwards, jenisys)
   * issue #172: Subfolders in junit XML filenames (provided by: roignac).
+  * issue #203: Integration with pdb (debug on error; basic support)
   * Simple test runner to run behave tests from "setup.py"
 
 FIXED:

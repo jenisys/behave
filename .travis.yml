@@ -1,46 +1,51 @@
 language: python
+sudo: false
 python:
-  - 2.6
-  - 2.7
-  - pypy
+  - "2.6"
+  - "2.7"
+  - "3.3"
+  - "3.4"
+  - "3.5.1"
+  - "pypy"
+  - "3.5"
+  
+# DISABLED: - "nightly"
+# -- AVOID:  python: "3.5" => python 3.5.0
+# Seems to have a problem with unit tests in exception traceback.
+# Behaviour is fixed in python 3.5.1
 
-env:
-  - JYTHON=false
-  - JYTHON=true
-
+# -- TEST-BALLON: Check if Python 3.5 is actually Python 3.5.1 or newer
 matrix:
   allow_failures:
-    - env: JYTHON=true
-  exclude:
-    - python: 2.6
-      env: JYTHON=true
-    - python: pypy
-      env: JYTHON=true
+    - python: "3.5"
 
-before_install:
-  - export JYTHON_URL='http://search.maven.org/remotecontent?filepath=org/python/jython-installer/2.7-b1/jython-installer-2.7-b1.jar'
-  - if [ "$JYTHON" == "true" ]; then wget $JYTHON_URL -O jython_installer.jar; java -jar jython_installer.jar -s -d $HOME/jython; export PATH=$HOME/jython:$PATH; fi
-  - if [ "$JYTHON" == "true" ]; then export PYTHON_EXE=jython; jython -c "print ''"; else export PYTHON_EXE=python; fi
-  - if [ "$JYTHON" == "true" ]; then curl -O http://python-distribute.org/distribute_setup.py; $PYTHON_EXE distribute_setup.py; fi
-  - if [ "$JYTHON" == "true" ]; then curl -O https://raw.github.com/pypa/pip/master/contrib/get-pip.py ; $PYTHON_EXE get-pip.py; fi
-
-before_script:
-  - if [ "$JYTHON" == "true" ]; then export PYTHON_EXE=jython; jython -c "print ''"; else export PYTHON_EXE=python; fi
+cache:
+  directories:
+    - $HOME/.cache/pip
 
 install:
-  - $PYTHON_EXE --version
-  - pip install --use-mirrors -q mock nose PyHamcrest
-  - if [ "$JYTHON" == "true" ]; then pip install parse ; fi
-  - $PYTHON_EXE setup.py -q install
+  - travis_retry pip install -q mock nose PyHamcrest
+  - travis_retry pip install -q -U pytest
+  - python setup.py -q install
 
 script:
-  - $PYTHON_EXE --version
-  - nosetests
-  - behave -f progress --junit --tags=~@xfail features/
-  - behave -f progress --junit --tags=~@xfail tools/test-features/
-  - behave -f progress --junit --tags=~@xfail issue.features/
-  - behave -f progress --junit --tags=~@xfail selftest.features/
+  - python --version
+  - py.test test tests
+  - behave -f progress --junit features/
+  - behave -f progress --junit tools/test-features/
+  - behave -f progress --junit issue.features/
 
-# -- SEE ALSO:
-# http://www.topbug.net/blog/2012/05/27/use-travis-ci-with-jython/
-# script: $PYTHONEXE setup.py test
+after_failure:
+  - echo "FAILURE DETAILS (from XML reports):"
+  - bin/behave.junit_filter.py --status=failed reports
+
+# -- ALTERNATIVE:
+#  egrep -L 'errors="0"|failures="0"' reports/*.xml | xargs -t cat
+
+# -- USE: New container-based infrastructure for faster startup.
+#    http://docs.travis-ci.com/user/workers/container-based-infrastructure/
+#
+# SEE ALSO:
+#   http://lint.travis-ci.org
+#   http://docs.travis-ci.com/user/caching/
+#   http://docs.travis-ci.com/user/multi-os/  (Linux, MACOSX)

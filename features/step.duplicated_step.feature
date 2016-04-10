@@ -1,4 +1,3 @@
-@wip
 Feature: Duplicated Step Definitions
 
   As I tester and test writer
@@ -35,7 +34,7 @@ Feature: Duplicated Step Definitions
         """
     And the command output should contain:
         """
-        File "{__WORKDIR__}/features/steps/alice_steps.py", line 7, in <module>
+        File "features/steps/alice_steps.py", line 7, in <module>
         @given(u'I call Alice')
         """
 
@@ -73,11 +72,10 @@ Feature: Duplicated Step Definitions
         """
     And the command output should contain:
         """
-        File "{__WORKDIR__}/features/steps/bob2_steps.py", line 3, in <module>
+        File "features/steps/bob2_steps.py", line 3, in <module>
         @given('I call Bob')
         """
 
-  @wip
   @xfail
   Scenario: Duplicated Same Step Definition via import from another File
     Given a new working directory

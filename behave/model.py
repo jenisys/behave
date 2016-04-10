@@ -1,231 +1,34 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-lines
+"""
+This module provides the model element class that represent a behave model:
 
-from __future__ import with_statement
+* :class:`Feature`
+* :class:`Scenario`
+* :class:`ScenarioOutline`
+* :class:`Step`
+* ...
+"""
+
+from __future__ import absolute_import, with_statement, unicode_literals
 import copy
 import difflib
-import itertools
-import os.path
-import time
+import logging
 import traceback
-from behave import step_registry
-from behave.compat.os_path import relpath
+import itertools
+import sys
+import time
+import six
+from six.moves import zip       # pylint: disable=redefined-builtin
 
-
-class Argument(object):
-    '''An argument found in a *feature file* step name and extracted using
-    step decorator `parameters`_.
-
-    The attributes are:
-
-    .. attribute:: original
-
-       The actual text matched in the step name.
-
-    .. attribute:: value
-
-       The potentially type-converted value of the argument.
-
-    .. attribute:: name
-
-       The name of the argument. This will be None if the parameter is
-       anonymous.
-
-    .. attribute:: start
-
-       The start index in the step name of the argument. Used for display.
-
-    .. attribute:: end
-
-       The end index in the step name of the argument. Used for display.
-    '''
-    def __init__(self, start, end, original, value, name=None):
-        self.start = start
-        self.end = end
-        self.original = original
-        self.value = value
-        self.name = name
-
-
-# @total_ordering
-# class FileLocation(unicode):
-class FileLocation(object):
-    """
-    Provides a value object for file location objects.
-    A file location consists of:
-
-      * filename
-      * line (number), optional
-
-    LOCATION SCHEMA:
-      * "{filename}:{line}" or
-      * "{filename}" (if line number is not present)
-    """
-    # -- pylint: disable=R0904,R0924
-    #   R0904: 30,0:FileLocation: Too many public methods (43/30) => unicode
-    #   R0924: 30,0:FileLocation: Badly implemented Container, ...=> unicode
-    __pychecker__ = "missingattrs=line"     # -- Ignore warnings for 'line'.
-
-    def __init__(self, filename, line=None):
-        self.filename = filename
-        self.line = line
-
-    # def __new__(cls, filename, line=None):
-    #     assert isinstance(filename, basestring)
-    #     obj = unicode.__new__(cls, filename)
-    #     obj.line = line
-    #     obj.__filename = filename
-    #     return obj
-    #
-    # @property
-    # def filename(self):
-    #     # -- PREVENT: Assignments via property (and avoid self-recursion).
-    #     return self.__filename
-
-    def get(self):
-        return self.filename
-
-    def abspath(self):
-        return os.path.abspath(self.filename)
-
-    def basename(self):
-        return os.path.basename(self.filename)
-
-    def dirname(self):
-        return os.path.dirname(self.filename)
-
-    def relpath(self, start=os.curdir):
-        """
-        Compute relative path for start to filename.
-
-        :param start: Base path or start directory (default=current dir).
-        :return: Relative path from start to filename
-        """
-        return relpath(self.filename, start)
-
-    def exists(self):
-        return os.path.exists(self.filename)
-
-    def __eq__(self, other):
-        if isinstance(other, FileLocation):
-            return self.filename == other.filename and self.line == other.line
-        elif isinstance(other, basestring):
-            return self.filename == other
-        else:
-            raise AttributeError("Cannot compare FileLocation with %s:%s" % \
-                                 (type(other), other))
-
-    def __ne__(self, other):
-        return not self == other
-
-    def __lt__(self, other):
-        if isinstance(other, FileLocation):
-            if self.filename < other.filename:
-                return True
-            elif self.filename > other.filename:
-                return False
-            else:
-                assert self.filename == other.filename
-                return self.line < other.line
-        elif isinstance(other, basestring):
-            return self.filename < other
-        else:
-            raise AttributeError("Cannot compare FileLocation with %s:%s" % \
-                                 (type(other), other))
-
-    def __le__(self, other):
-        # -- SEE ALSO: python2.7, functools.total_ordering
-        return not other < self
-
-    def __gt__(self, other):
-        # -- SEE ALSO: python2.7, functools.total_ordering
-        if isinstance(other, FileLocation):
-            return other < self
-        else:
-            return self.filename > other
-
-    def __ge__(self, other):
-        # -- SEE ALSO: python2.7, functools.total_ordering
-        return not self < other
-
-    def __repr__(self):
-        return u'<FileLocation: filename="%s", line=%s>' % \
-               (self.filename, self.line)
-
-    def __str__(self):
-        if self.line is None:
-            return self.filename
-        return u"%s:%d" % (self.filename, self.line)
-
-
-class BasicStatement(object):
-    def __init__(self, filename, line, keyword, name):
-        filename = filename or '<string>'
-        filename = relpath(filename, os.getcwd())   # -- NEEDS: abspath?
-        self.location = FileLocation(filename, line)
-        assert isinstance(keyword, unicode)
-        assert isinstance(name, unicode)
-        self.keyword = keyword
-        self.name = name
-
-    @property
-    def filename(self):
-        # return os.path.abspath(self.location.filename)
-        return self.location.filename
-
-    @property
-    def line(self):
-        return self.location.line
-
-    # @property
-    # def location(self):
-    #     p = relpath(self.filename, os.getcwd())
-    #     return '%s:%d' % (p, self.line)
-
-    def __cmp__(self, other):
-        # -- NOTE: Ignore potential FileLocation differences.
-        return cmp((self.keyword, self.name), (other.keyword, other.name))
-
-
-class TagStatement(BasicStatement):
-
-    def __init__(self, filename, line, keyword, name, tags):
-        super(TagStatement, self).__init__(filename, line, keyword, name)
-        self.tags = tags
-
-
-class TagAndStatusStatement(BasicStatement):
-    final_status = ('passed', 'failed', 'skipped')
-
-    def __init__(self, filename, line, keyword, name, tags):
-        super(TagAndStatusStatement, self).__init__(filename, line, keyword, name)
-        self.tags = tags
-        self.should_skip = False
-        self._cached_status = None
-
-    @property
-    def status(self):
-        if self._cached_status not in self.final_status:
-            # -- RECOMPUTE: As long as final status is not reached.
-            self._cached_status = self.compute_status()
-        return self._cached_status
-
-    def reset(self):
-        self.should_skip = False
-        self._cached_status = None
-
-    def compute_status(self):
-        raise NotImplementedError
-
-
-class Replayable(object):
-    type = None
-
-    def replay(self, formatter):
-        getattr(formatter, self.type)(self)
+from behave.model_core import \
+        BasicStatement, TagAndStatusStatement, TagStatement, Replayable
+from behave.matchers import NoMatch
+from behave.textutil import text as _text
 
 
 class Feature(TagAndStatusStatement, Replayable):
-    '''A `feature`_ parsed from a *feature file*.
+    """A `feature`_ parsed from a *feature file*.
 
     The attributes are:
 
@@ -254,8 +57,8 @@ class Feature(TagAndStatusStatement, Replayable):
     .. attribute:: tags
 
        A list of @tags (as :class:`~behave.model.Tag` which are basically
-       glorified strings) attached to the feature. See `controlling
-       things with tags`_.
+       glorified strings) attached to the feature.
+       See :ref:`controlling things with tags`.
 
     .. attribute:: status
 
@@ -272,6 +75,12 @@ class Feature(TagAndStatusStatement, Replayable):
        "failed"
          One or more steps of this feature failed.
 
+    .. attribute:: hook_failed
+
+        Indicates if a hook failure occured while running this feature.
+
+        .. versionadded:: 1.2.6
+
     .. attribute:: duration
 
        The time, in seconds, that it took to test this feature. If read before
@@ -286,28 +95,39 @@ class Feature(TagAndStatusStatement, Replayable):
 
        The line number of the *feature file* where the feature was found.
 
+    .. attribute:: language
+
+       Indicates which spoken language (English, French, German, ..) was used
+       for parsing the feature file and its keywords. The I18N language code
+       indicates which language is used. This corresponds to the language tag
+       at the beginning of the feature file.
+
+       .. versionadded:: 1.2.6
+
     .. _`feature`: gherkin.html#features
-    '''
+    """
 
     type = "feature"
 
     def __init__(self, filename, line, keyword, name, tags=None,
-                 description=None, scenarios=None, background=None):
+                 description=None, scenarios=None, background=None,
+                 language=None):
         tags = tags or []
         super(Feature, self).__init__(filename, line, keyword, name, tags)
         self.description = description or []
         self.scenarios = []
         self.background = background
+        self.language = language
         self.parser = None
+        self.hook_failed = False
         if scenarios:
             for scenario in scenarios:
                 self.add_scenario(scenario)
 
     def reset(self):
-        '''
-        Reset to clean state before a test run.
-        '''
+        """Reset to clean state before a test run."""
         super(Feature, self).reset()
+        self.hook_failed = False
         for scenario in self.scenarios:
             scenario.reset()
 
@@ -324,10 +144,10 @@ class Feature(TagAndStatusStatement, Replayable):
         self.scenarios.append(scenario)
 
     def compute_status(self):
-        """
-        Compute the status of this feature based on its:
-           * scenarios
-           * scenario outlines
+        """Compute the status of this feature based on its:
+          * scenarios
+          * scenario outlines
+          * hook failures
 
         :return: Computed status (as string-enum).
         """
@@ -335,17 +155,24 @@ class Feature(TagAndStatusStatement, Replayable):
         passed_count = 0
         for scenario in self.scenarios:
             scenario_status = scenario.status
-            if scenario_status == 'failed':
-                return 'failed'
-            elif scenario_status == 'untested':
+            if scenario_status == "failed":
+                return "failed"
+            elif scenario_status == "untested":
                 if passed_count > 0:
-                    return 'failed'  # ABORTED: Some passed, now untested.
-                return 'untested'
-            if scenario_status != 'skipped':
+                    return "failed"  # ABORTED: Some passed, now untested.
+                return "untested"
+            if scenario_status != "skipped":
                 skipped = False
-            if scenario_status == 'passed':
+            if scenario_status == "passed":
                 passed_count += 1
-        return skipped and 'skipped' or 'passed'
+
+        if skipped:
+            return "skipped"
+        elif self.hook_failed:
+            return "failed"
+        else:
+            return "passed"
+
 
     @property
     def duration(self):
@@ -396,15 +223,14 @@ class Feature(TagAndStatusStatement, Replayable):
         return answer
 
     def should_run_with_tags(self, tag_expression):
-        '''
-        Determines if this feature should run when the tag expression is used.
+        """Determines if this feature should run when the tag expression is used.
         A feature should run if:
           * it should run according to its tags
           * any of its scenarios should run according to its tags
 
         :param tag_expression:  Runner/config environment tags to use.
         :return: True, if feature should run. False, otherwise (skip it).
-        '''
+        """
         run_feature = tag_expression.check(self.tags)
         if not run_feature:
             for scenario in self:
@@ -414,21 +240,40 @@ class Feature(TagAndStatusStatement, Replayable):
         return run_feature
 
     def mark_skipped(self):
+        """Marks this feature (and all its scenarios and steps) as skipped.
+        Note this function may be called before the feature is executed.
         """
-        Marks this feature (and all its scenarios and steps) as skipped.
-        """
-        self._cached_status = None
-        self.should_skip = True
-        for scenario in self.scenarios:
-            scenario.mark_skipped()
-        else:
-            # -- SPECIAL CASE: Feature without scenarios
-            self._cached_status = "skipped"
+        self.skip(require_not_executed=True)
         assert self.status == "skipped"
 
-    def run(self, runner):
+    def skip(self, reason=None, require_not_executed=False):
+        """Skip executing this feature or the remaining parts of it.
+        Note that this feature may be already partly executed
+        when this function is called.
+
+        :param reason:  Optional reason why feature should be skipped (as string).
+        :param require_not_executed: Optional, requires that feature is not
+                        executed yet (default: false).
+        """
+        if reason:
+            logger = logging.getLogger("behave")
+            logger.warning(u"SKIP FEATURE %s: %s", self.name, reason)
+
         self._cached_status = None
-        runner.context._push()
+        self.should_skip = True
+        self.skip_reason = reason
+        for scenario in self.scenarios:
+            scenario.skip(reason, require_not_executed)
+        if not self.scenarios:
+            # -- SPECIAL CASE: Feature without scenarios
+            self._cached_status = "skipped"
+        assert self.status in self.final_status #< skipped, failed or passed.
+
+    def run(self, runner):
+        # pylint: disable=too-many-branches
+        self._cached_status = None
+        self.hook_failed = False
+        runner.context._push()      # pylint: disable=protected-access
         runner.context.feature = self
 
         # run this feature if the tags say so or any one of its scenarios
@@ -440,10 +285,16 @@ class Feature(TagAndStatusStatement, Replayable):
         # current tags as a set
         runner.context.tags = set(self.tags)
 
+        hooks_called = False
         if not runner.config.dry_run and run_feature:
+            hooks_called = True
             for tag in self.tags:
-                runner.run_hook('before_tag', runner.context, tag)
-            runner.run_hook('before_feature', runner.context, self)
+                runner.run_hook("before_tag", runner.context, tag)
+            runner.run_hook("before_feature", runner.context, self)
+
+            # -- RE-EVALUATE SHOULD-RUN STATE:
+            # Hook may call feature.mark_skipped() to exclude it.
+            run_feature = self.should_run()
 
         if self.background and (run_feature or runner.config.show_skipped):
             for formatter in runner.formatters:
@@ -453,7 +304,7 @@ class Feature(TagAndStatusStatement, Replayable):
         for scenario in self.scenarios:
             # -- OPTIONAL: Select scenario by name (regular expressions).
             if (runner.config.name and
-                    not runner.config.name_re.search(scenario.name)):
+                    not scenario.should_run_with_name_select(runner.config)):
                 scenario.mark_skipped()
                 continue
 
@@ -463,17 +314,20 @@ class Feature(TagAndStatusStatement, Replayable):
                 if runner.config.stop or runner.aborted:
                     # -- FAIL-EARLY: Stop after first failure.
                     break
-        else:
-            if not run_feature:
-                # -- SPECIAL CASE: Feature without scenarios:
-                self._cached_status = 'skipped'
 
-        if run_feature:
-            runner.run_hook('after_feature', runner.context, self)
+        self._cached_status = None  # -- ENFORCE: compute_status() after run.
+        if not self.scenarios and not run_feature:
+            # -- SPECIAL CASE: Feature without scenarios
+            self._cached_status = "skipped"
+
+        if hooks_called:
+            runner.run_hook("after_feature", runner.context, self)
+            if self.hook_failed and failed_count == 0:
+                failed_count = 1
             for tag in self.tags:
-                runner.run_hook('after_tag', runner.context, tag)
+                runner.run_hook("after_tag", runner.context, tag)
 
-        runner.context._pop()
+        runner.context._pop()       # pylint: disable=protected-access
 
         if run_feature or runner.config.show_skipped:
             for formatter in runner.formatters:
@@ -484,7 +338,7 @@ class Feature(TagAndStatusStatement, Replayable):
 
 
 class Background(BasicStatement, Replayable):
-    '''A `background`_ parsed from a *feature file*.
+    """A `background`_ parsed from a *feature file*.
 
     The attributes are:
 
@@ -508,15 +362,15 @@ class Background(BasicStatement, Replayable):
 
     .. attribute:: filename
 
-       The file name (or "<string>") of the *feature file* where the scenario
+       The file name (or "<string>") of the *feature file* where the background
        was found.
 
     .. attribute:: line
 
-       The line number of the *feature file* where the scenario was found.
+       The line number of the *feature file* where the background was found.
 
     .. _`background`: gherkin.html#backgrounds
-    '''
+    """
     type = "background"
 
     def __init__(self, filename, line, keyword, name, steps=None):
@@ -538,7 +392,7 @@ class Background(BasicStatement, Replayable):
 
 
 class Scenario(TagAndStatusStatement, Replayable):
-    '''A `scenario`_ parsed from a *feature file*.
+    """A `scenario`_ parsed from a *feature file*.
 
     The attributes are:
 
@@ -567,8 +421,8 @@ class Scenario(TagAndStatusStatement, Replayable):
     .. attribute:: tags
 
        A list of @tags (as :class:`~behave.model.Tag` which are basically
-       glorified strings) attached to the scenario. See `controlling
-       things with tags`_.
+       glorified strings) attached to the scenario.
+       See :ref:`controlling things with tags`.
 
     .. attribute:: status
 
@@ -585,6 +439,12 @@ class Scenario(TagAndStatusStatement, Replayable):
        "failed"
          One or more steps of this scenario failed.
 
+    .. attribute:: hook_failed
+
+        Indicates if a hook failure occured while running this scenario.
+
+        .. versionadded:: 1.2.6
+
     .. attribute:: duration
 
        The time, in seconds, that it took to test this scenario. If read before
@@ -599,9 +459,12 @@ class Scenario(TagAndStatusStatement, Replayable):
 
        The line number of the *feature file* where the scenario was found.
 
+
     .. _`scenario`: gherkin.html#scenarios
-    '''
+    """
+    # pylint: disable=too-many-instance-attributes
     type = "scenario"
+    continue_after_failed_step = False
 
     def __init__(self, filename, line, keyword, name, tags=None, steps=None,
                  description=None):
@@ -611,6 +474,7 @@ class Scenario(TagAndStatusStatement, Replayable):
         self.steps = steps or []
         self.background = None
         self.feature = None  # REFER-TO: owner=Feature
+        self.hook_failed = False
         self._background_steps = None
         self._row = None
         self.was_dry_run = False
@@ -618,10 +482,9 @@ class Scenario(TagAndStatusStatement, Replayable):
         self.stdout = None
 
     def reset(self):
-        '''
-        Reset the internal data to reintroduce new-born state just after the
+        """Reset the internal data to reintroduce new-born state just after the
         ctor was called.
-        '''
+        """
         super(Scenario, self).reset()
         self._row = None
         self.was_dry_run = False
@@ -632,15 +495,14 @@ class Scenario(TagAndStatusStatement, Replayable):
 
     @property
     def background_steps(self):
-        '''
-        Provide background steps if feature has a background.
+        """Provide background steps if feature has a background.
         Lazy init that copies the background steps.
 
         Note that a copy of the background steps is needed to ensure
         that the background step status is specific to the scenario.
 
         :return:  List of background steps or empty list
-        '''
+        """
         if self._background_steps is None:
             # -- LAZY-INIT (need copy of background.steps):
             # Each scenario needs own background.steps status.
@@ -663,32 +525,36 @@ class Scenario(TagAndStatusStatement, Replayable):
         return '<Scenario "%s">' % self.name
 
     def __iter__(self):
-        # XXX return iter(self.all_steps)
         return self.all_steps
 
     def compute_status(self):
-        """Compute the status of the scenario from its steps.
+        """Compute the status of the scenario from its steps
+        (and hook failures).
+
         :return: Computed status (as string).
         """
         for step in self.all_steps:
-            if step.status == 'undefined':
+            if step.status == "undefined":
                 if self.was_dry_run:
                     # -- SPECIAL CASE: In dry-run with undefined-step discovery
                     #    Undefined steps should not cause failed scenario.
-                    return 'untested'
+                    return "untested"
                 else:
                     # -- NORMALLY: Undefined steps cause failed scenario.
-                    return 'failed'
-            elif step.status != 'passed':
-                assert step.status in ('failed', 'skipped', 'untested')
+                    return "failed"
+            elif step.status != "passed":
+                assert step.status in ("failed", "skipped", "untested")
                 return step.status
-            #elif step.status == 'failed':
-            #    return 'failed'
-            #elif step.status == 'skipped':
-            #    return 'skipped'
-            #elif step.status == 'untested':
-            #    return 'untested'
-        return 'passed'
+            #elif step.status == "failed":
+            #    return "failed"
+            #elif step.status == "skipped":
+            #    return "skipped"
+            #elif step.status == "untested":
+            #    return "untested"
+
+        if self.hook_failed:
+            return "failed"
+        return "passed"
 
     @property
     def duration(self):
@@ -718,13 +584,15 @@ class Scenario(TagAndStatusStatement, Replayable):
 
           * if the Scenario is marked as skipped
           * if the config.tags (tag expression) enable/disable this scenario
+          * if the scenario is selected by name
 
         :param config:  Runner configuration to use (optional).
         :return: True, if scenario should run. False, otherwise.
         """
         answer = not self.should_skip
         if answer and config:
-            answer = self.should_run_with_tags(config.tags)
+            answer = (self.should_run_with_tags(config.tags) and
+                      self.should_run_with_name_select(config))
         return answer
 
     def should_run_with_tags(self, tag_expression):
@@ -736,23 +604,51 @@ class Scenario(TagAndStatusStatement, Replayable):
         """
         return tag_expression.check(self.effective_tags)
 
+    def should_run_with_name_select(self, config):
+        """Determines if this scenario should run when it is selected by name.
+
+        :param config:  Runner/config environment name regexp (if any).
+        :return: True, if scenario should run. False, otherwise (skip it).
+        """
+        # -- SELECT-ANY: If select by name is not specified (not config.name).
+        return not config.name or config.name_re.search(self.name)
+
     def mark_skipped(self):
+        """Marks this scenario (and all its steps) as skipped.
+        Note that this method can be called before the scenario is executed.
         """
-        Marks this scenario (and all its steps) as skipped.
-        """
-        self._cached_status = None
-        self.should_skip = True
-        for step in self.all_steps:
-            assert step.status == "untested" or step.status == "skipped"
-            step.status = "skipped"
-        else:
-            # -- SPECIAL CASE: Scenario without steps
-            self._cached_status = "skipped"
+        self.skip(require_not_executed=True)
         assert self.status == "skipped", "OOPS: scenario.status=%s" % self.status
 
+    def skip(self, reason=None, require_not_executed=False):
+        """Skip from executing this scenario or the remaining parts of it.
+        Note that the scenario may be already partly executed
+        when this method is called.
+
+        :param reason:  Optional reason why it should be skipped (as string).
+        """
+        if reason:
+            scenario_type = self.__class__.__name__
+            logger = logging.getLogger("behave")
+            logger.warning(u"SKIP %s %s: %s", scenario_type, self.name, reason)
+
+        self._cached_status = None
+        self.should_skip = True
+        self.skip_reason = reason
+        for step in self.all_steps:
+            not_executed = step.status in ("untested", "skipped")
+            if not_executed:
+                step.status = "skipped"
+            else:
+                assert not require_not_executed, \
+                    "REQUIRE NOT-EXECUTED, but step is %s" % step.status
+        if not self.all_steps:
+            # -- SPECIAL CASE: Scenario without steps
+            self._cached_status = "skipped"
+        assert self.status in self.final_status #< skipped, failed or passed
+
     def run(self, runner):
-        # pylint: disable=W0212
-        #   W0212   Access to a protected member: runner.context._push()/._pop()
+        # pylint: disable=too-many-branches, too-many-statements
         self._cached_status = None
         failed = False
         run_scenario = self.should_run(runner.config)
@@ -764,14 +660,20 @@ class Scenario(TagAndStatusStatement, Replayable):
             for formatter in runner.formatters:
                 formatter.scenario(self)
 
-        runner.context._push()
+        runner.context._push()      # pylint: disable=protected-access
         runner.context.scenario = self
         runner.context.tags = set(self.effective_tags)
 
+        hooks_called = False
         if not runner.config.dry_run and run_scenario:
+            hooks_called = True
             for tag in self.tags:
-                runner.run_hook('before_tag', runner.context, tag)
-            runner.run_hook('before_scenario', runner.context, self)
+                runner.run_hook("before_tag", runner.context, tag)
+            runner.run_hook("before_scenario", runner.context, self)
+
+            # -- RE-EVALUATE SHOULD-RUN STATE:
+            # Hook may call scenario.mark_skipped() to exclude it.
+            run_scenario = run_steps = self.should_run()
 
         runner.setup_capture()
 
@@ -780,34 +682,43 @@ class Scenario(TagAndStatusStatement, Replayable):
                 for formatter in runner.formatters:
                     formatter.step(step)
 
-        # BAD: Better provide a public method.
-        # pylint: disable=W0212
-        #   W0212   Access to a protected member: _set_root_attribute()
         for step in self.all_steps:
             if run_steps:
                 if not step.run(runner):
-                    run_steps = False
+                    # -- CASE: Failed or undefined step
+                    #    Optionally continue_after_failed_step if enabled.
+                    #    But disable run_steps after undefined-step.
+                    run_steps = (self.continue_after_failed_step and
+                                 step.status == "failed")
                     failed = True
-                    runner.context._set_root_attribute('failed', True)
-                    self._cached_status = 'failed'
+                    # pylint: disable=protected-access
+                    runner.context._set_root_attribute("failed", True)
+                    self._cached_status = "failed"
+                elif self.should_skip:
+                    # -- CASE: Step skipped remaining scenario.
+                    # assert self.status == "skipped", "Status: %s" % self.status
+                    run_steps = False
             elif failed or dry_run_scenario:
                 # -- SKIP STEPS: After failure/undefined-step occurred.
                 # BUT: Detect all remaining undefined steps.
-                step.status = 'skipped'
+                step.status = "skipped"
                 if dry_run_scenario:
-                    step.status = 'untested'
-                found_step = step_registry.registry.find_match(step)
+                    step.status = "untested"
+                found_step = runner.step_registry.find_match(step)
                 if not found_step:
-                    step.status = 'undefined'
+                    step.status = "undefined"
                     runner.undefined_steps.append(step)
             else:
                 # -- SKIP STEPS: For disabled scenario.
-                # NOTE: Undefined steps are not detected (by intention).
-                step.status = 'skipped'
-        else:
-            if not run_scenario:
-                # -- SPECIAL CASE: Scenario without steps.
-                self._cached_status = 'skipped'
+                # CASES:
+                #   * Undefined steps are not detected (by intention).
+                #   * Step skipped remaining scenario.
+                step.status = "skipped"
+
+        self._cached_status = None  # -- ENFORCE: compute_status() after run.
+        if not run_scenario:
+            # -- SPECIAL CASE: Scenario without steps.
+            self._cached_status = "skipped"
 
         # Attach the stdout and stderr if generate Junit report
         if runner.config.junit:
@@ -815,17 +726,154 @@ class Scenario(TagAndStatusStatement, Replayable):
             self.stderr = runner.context.stderr_capture.getvalue()
         runner.teardown_capture()
 
-        if not runner.config.dry_run and run_scenario:
-            runner.run_hook('after_scenario', runner.context, self)
+        if hooks_called:
+            runner.run_hook("after_scenario", runner.context, self)
+            if self.hook_failed:
+                failed = True
             for tag in self.tags:
-                runner.run_hook('after_tag', runner.context, tag)
+                runner.run_hook("after_tag", runner.context, tag)
 
-        runner.context._pop()
+        runner.context._pop()       # pylint: disable=protected-access
         return failed
 
 
+class ScenarioOutlineBuilder(object):
+    """Helper class to use a ScenarioOutline as a template and
+    build its scenarios (as template instances).
+    """
+
+    def __init__(self, annotation_schema):
+        self.annotation_schema = annotation_schema
+
+    @staticmethod
+    def render_template(text, row=None, params=None):
+        """Render a text template with placeholders, ala "Hello <name>".
+
+        :param row:     As placeholder provider (dict-like).
+        :param params:  As additional placeholder provider (as dict).
+        :return: Rendered text, known placeholders are substituted w/ values.
+        """
+        if not ("<" in text and ">" in text):
+            return text
+
+        safe_values = False
+        for placeholders in (row, params):
+            if not placeholders:
+                continue
+            for name, value in placeholders.items():
+                if safe_values and ("<" in value and ">" in value):
+                    continue    # -- OOPS, value looks like placeholder.
+                text = text.replace("<%s>" % name, value)
+        return text
+
+    def make_scenario_name(self, outline_name, example, row, params=None):
+        """Build a scenario name for an example row of this scenario outline.
+        Placeholders for row data are replaced by values.
+
+        SCHEMA: "{outline_name} -*- {examples.name}@{row.id}"
+
+        :param outline_name:    ScenarioOutline's name (as template).
+        :param example:         Examples object.
+        :param row:             Row of this example.
+        :param params:          Additional placeholders for example/row.
+        :return: Computed name for the scenario representing example/row.
+        """
+        if params is None:
+            params = {}
+        params["examples.name"] = example.name or ""
+        params.setdefault("examples.index", example.index)
+        params.setdefault("row.index", row.index)
+        params.setdefault("row.id", row.id)
+
+        # -- STEP: Replace placeholders in scenario/example name (if any).
+        examples_name = self.render_template(example.name, row, params)
+        params["examples.name"] = examples_name
+        scenario_name = self.render_template(outline_name, row, params)
+
+        class Data(object):
+            def __init__(self, name, index):
+                self.name = name
+                self.index = index
+                self.id = name      # pylint: disable=invalid-name
+
+        example_data = Data(examples_name, example.index)
+        row_data = Data(row.id, row.index)
+        return self.annotation_schema.format(name=scenario_name,
+                                             examples=example_data, row=row_data)
+
+    @classmethod
+    def make_row_tags(cls, outline_tags, row, params=None):
+        if not outline_tags:
+            return []
+
+        tags = []
+        for tag in outline_tags:
+            if "<" in tag and ">" in tag:
+                tag = cls.render_template(tag, row, params)
+            if "<" in tag or ">" in tag:
+                # -- OOPS: Unknown placeholder, drop tag.
+                continue
+            new_tag = Tag.make_name(tag, unescape=True)
+            tags.append(new_tag)
+        return tags
+
+    @classmethod
+    def make_step_for_row(cls, outline_step, row, params=None):
+        # -- BASED-ON: new_step = outline_step.set_values(row)
+        new_step = copy.deepcopy(outline_step)
+        new_step.name = cls.render_template(new_step.name, row, params)
+        if new_step.text:
+            new_step.text = cls.render_template(new_step.text, row)
+        if new_step.table:
+            for name, value in row.items():
+                for row in new_step.table:
+                    for i, cell in enumerate(row.cells):
+                        row.cells[i] = cell.replace("<%s>" % name, value)
+        return new_step
+
+    def build_scenarios(self, scenario_outline):
+        """Build scenarios for a ScenarioOutline from its examples."""
+        # -- BUILD SCENARIOS (once): For this ScenarioOutline from examples.
+        params = {
+            "examples.name": None,
+            "examples.index": None,
+            "row.index": None,
+            "row.id": None,
+        }
+        scenarios = []
+        for example_index, example in enumerate(scenario_outline.examples):
+            example.index = example_index+1
+            params["examples.name"] = example.name
+            params["examples.index"] = _text(example.index)
+            for row_index, row in enumerate(example.table):
+                row.index = row_index+1
+                row.id = "%d.%d" % (example.index, row.index)
+                params["row.id"] = row.id
+                params["row.index"] = _text(row.index)
+                scenario_name = self.make_scenario_name(scenario_outline.name,
+                                                        example, row, params)
+                row_tags = self.make_row_tags(scenario_outline.tags, row, params)
+                row_tags.extend(example.tags)
+                new_steps = []
+                for outline_step in scenario_outline.steps:
+                    new_step = self.make_step_for_row(outline_step, row, params)
+                    new_steps.append(new_step)
+
+                # -- STEP: Make Scenario name for this row.
+                # scenario_line = example.line + 2 + row_index
+                scenario_line = row.line
+                scenario = Scenario(scenario_outline.filename, scenario_line,
+                                    scenario_outline.keyword,
+                                    scenario_name, row_tags, new_steps)
+                scenario.feature = scenario_outline.feature
+                scenario.background = scenario_outline.background
+                scenario._row = row     # pylint: disable=protected-access
+                scenarios.append(scenario)
+        return scenarios
+
+
 class ScenarioOutline(Scenario):
-    '''A `scenario outline`_ parsed from a *feature file*.
+    """A `scenario outline`_ parsed from a *feature file*.
 
     A scenario outline extends the existing :class:`~behave.model.Scenario`
     class with the addition of the :class:`~behave.model.Examples` tables of
@@ -862,8 +910,8 @@ class ScenarioOutline(Scenario):
     .. attribute:: tags
 
        A list of @tags (as :class:`~behave.model.Tag` which are basically
-       glorified strings) attached to the scenario. See `controlling
-       things with tags`_.
+       glorified strings) attached to the scenario.
+       See :ref:`controlling things with tags`.
 
     .. attribute:: status
 
@@ -895,8 +943,9 @@ class ScenarioOutline(Scenario):
        The line number of the *feature file* where the scenario was found.
 
     .. _`scenario outline`: gherkin.html#scenario-outlines
-    '''
+    """
     type = "scenario_outline"
+    annotation_schema = u"{name} -- @{row.id} {examples.name}"
 
     def __init__(self, filename, line, keyword, name, tags=None,
                  steps=None, examples=None, description=None):
@@ -906,91 +955,129 @@ class ScenarioOutline(Scenario):
         self._scenarios = []
 
     def reset(self):
-        '''
-        Reset runtime temporary data like before a test run.
-        '''
+        """Reset runtime temporary data like before a test run."""
         super(ScenarioOutline, self).reset()
-        for scenario in self.scenarios:
+        for scenario in self._scenarios:    # -- AVOID: BUILD-SCENARIOS
             scenario.reset()
 
     @property
     def scenarios(self):
-        '''Return the scenarios with the steps altered to take the values from
+        """Return the scenarios with the steps altered to take the values from
         the examples.
-        '''
+        """
         if self._scenarios:
             return self._scenarios
 
-        for example in self.examples:
-            for row in example.table:
-                new_steps = []
-                for step in self.steps:
-                    new_steps.append(step.set_values(row))
-                scenario = Scenario(self.filename, self.line, self.keyword,
-                                    self.name, self.tags, new_steps)
-                scenario.feature = self.feature
-                scenario.background = self.background
-                scenario._row = row
-                self._scenarios.append(scenario)
+        # -- BUILD SCENARIOS (once): For this ScenarioOutline from examples.
+        builder = ScenarioOutlineBuilder(self.annotation_schema)
+        self._scenarios = builder.build_scenarios(self)
         return self._scenarios
 
     def __repr__(self):
         return '<ScenarioOutline "%s">' % self.name
 
     def __iter__(self):
-        return iter(self.scenarios)
+        return iter(self.scenarios) # -- REQUIRE: BUILD-SCENARIOS
 
     def compute_status(self):
-        for scenario in self.scenarios:
+        skipped_count = 0
+        for scenario in self._scenarios:    # -- AVOID: BUILD-SCENARIOS
             scenario_status = scenario.status
-            if scenario_status != 'passed':
-                assert scenario_status in ('failed', 'skipped', 'untested')
+            if scenario_status in ("failed", "untested"):
                 return scenario_status
-            #if scenario.status == 'failed':
-            #    return 'failed'
-            #elif scenario.status == 'skipped':
-            #    return 'skipped'
-            #elif scenario.status == 'untested':
-            #    return 'untested'
-        return 'passed'
+            elif scenario_status == "skipped":
+                skipped_count += 1
+        if skipped_count > 0 and skipped_count == len(self._scenarios):
+            # -- ALL SKIPPED:
+            return "skipped"
+        # -- OTHERWISE: ALL PASSED
+        return "passed"
 
     @property
     def duration(self):
         outline_duration = 0
-        for scenario in self.scenarios:
+        for scenario in self._scenarios:    # -- AVOID: BUILD-SCENARIOS
             outline_duration += scenario.duration
         return outline_duration
 
+    def should_run_with_tags(self, tag_expression):
+        """Determines if this scenario outline (or one of its scenarios)
+        should run when the tag expression is used.
+
+        :param tag_expression:  Runner/config environment tags to use.
+        :return: True, if scenario should run. False, otherwise (skip it).
+        """
+        if tag_expression.check(self.effective_tags):
+            return True
+
+        for scenario in self.scenarios:     # -- REQUIRE: BUILD-SCENARIOS
+            if scenario.should_run_with_tags(tag_expression):
+                return True
+        # -- NOTHING SELECTED:
+        return False
+
+    def should_run_with_name_select(self, config):
+        """Determines if this scenario should run when it is selected by name.
+
+        :param config:  Runner/config environment name regexp (if any).
+        :return: True, if scenario should run. False, otherwise (skip it).
+        """
+        if not config.name:
+            return True # -- SELECT-ALL: Select by name is not specified.
+
+        for scenario in self.scenarios:     # -- REQUIRE: BUILD-SCENARIOS
+            if scenario.should_run_with_name_select(config):
+                return True
+        # -- NOTHING SELECTED:
+        return False
+
+
     def mark_skipped(self):
+        """Marks this scenario outline (and all its scenarios/steps) as skipped.
+        Note that this method may be called before the scenario outline
+        is executed.
         """
-        Marks this scenario outline (and all its scenarios/steps) as skipped.
+        self.skip(require_not_executed=True)
+        assert self.status == "skipped"
+
+    def skip(self, reason=None, require_not_executed=False):
+        """Skip from executing this scenario outline or its remaining parts.
+        Note that the scenario outline may be already partly executed
+        when this method is called.
+
+        :param reason:  Optional reason why it should be skipped (as string).
         """
+        if reason:
+            logger = logging.getLogger("behave")
+            logger.warning(u"SKIP ScenarioOutline %s: %s", self.name, reason)
+
         self._cached_status = None
         self.should_skip = True
         for scenario in self.scenarios:
-            scenario.mark_skipped()
-        else:
+            scenario.skip(reason, require_not_executed)
+        if not self.scenarios:
             # -- SPECIAL CASE: ScenarioOutline without scenarios/examples
             self._cached_status = "skipped"
-        assert self.status == "skipped"
+        assert self.status in self.final_status #< skipped, failed or passed
 
     def run(self, runner):
+        # pylint: disable=protected-access
+        # REASON: context._set_root_attribute(), scenario._row
         self._cached_status = None
         failed_count = 0
-        for scenario in self.scenarios:
-            runner.context._set_root_attribute('active_outline', scenario._row)
+        for scenario in self.scenarios:     # -- REQUIRE: BUILD-SCENARIOS
+            runner.context._set_root_attribute("active_outline", scenario._row)
             failed = scenario.run(runner)
             if failed:
                 failed_count += 1
                 if runner.config.stop or runner.aborted:
                     # -- FAIL-EARLY: Stop after first failure.
                     break
-        runner.context._set_root_attribute('active_outline', None)
+        runner.context._set_root_attribute("active_outline", None)
         return failed_count > 0
 
-
-class Examples(BasicStatement, Replayable):
-    '''A table parsed from a `scenario outline`_ in a *feature file*.
+class Examples(TagStatement, Replayable):
+    """A table parsed from a `scenario outline`_ in a *feature file*.
 
     The attributes are:
 
@@ -1010,24 +1097,25 @@ class Examples(BasicStatement, Replayable):
 
     .. attribute:: filename
 
-       The file name (or "<string>") of the *feature file* where the scenario
+       The file name (or "<string>") of the *feature file* where the example
        was found.
 
     .. attribute:: line
 
-       The line number of the *feature file* where the scenario was found.
+       The line number of the *feature file* where the example was found.
 
     .. _`examples`: gherkin.html#examples
-    '''
+    """
     type = "examples"
 
-    def __init__(self, filename, line, keyword, name, table=None):
-        super(Examples, self).__init__(filename, line, keyword, name)
+    def __init__(self, filename, line, keyword, name, tags=None, table=None):
+        super(Examples, self).__init__(filename, line, keyword, name, tags)
         self.table = table
+        self.index = None
 
 
 class Step(BasicStatement, Replayable):
-    '''A single `step`_ parsed from a *feature file*.
+    """A single `step`_ parsed from a *feature file*.
 
     The attributes are:
 
@@ -1069,6 +1157,12 @@ class Step(BasicStatement, Replayable):
        "failed"
          The step failed.
 
+    .. attribute:: hook_failed
+
+        Indicates if a hook failure occured while running this step.
+
+        .. versionadded:: 1.2.6
+
     .. attribute:: duration
 
        The time, in seconds, that it took to test this step. If read before the
@@ -1089,7 +1183,7 @@ class Step(BasicStatement, Replayable):
        The line number of the *feature file* where the step was found.
 
     .. _`step`: gherkin.html#steps
-    '''
+    """
     type = "step"
 
     def __init__(self, filename, line, keyword, step_type, name, text=None,
@@ -1099,17 +1193,25 @@ class Step(BasicStatement, Replayable):
         self.text = text
         self.table = table
 
-        self.status = 'untested'
-        self.duration = 0.0
-        self.error_message = None
+        self.status = "untested"
+        self.hook_failed = False
+        self.duration = 0
         self.exception = None
+        self.exc_traceback = None
+        self.error_message = None
 
     def reset(self):
-        '''Reset temporary runtime data to reach clean state again.'''
-        self.status = 'untested'
-        self.duration = 0.0
-        self.error_message = None
+        """Reset temporary runtime data to reach clean state again."""
+        self.status = "untested"
+        self.hook_failed = False
+        self.duration = 0
         self.exception = None
+        self.exc_traceback = None
+        self.error_message = None
+
+    def store_exception_context(self, exception):
+        self.exception = exception
+        self.exc_traceback = sys.exc_info()[2]
 
     def __repr__(self):
         return '<%s "%s">' % (self.step_type, self.name)
@@ -1121,44 +1223,49 @@ class Step(BasicStatement, Replayable):
         return hash(self.step_type) + hash(self.name)
 
     def set_values(self, table_row):
-        result = copy.deepcopy(self)
-        for name, value in table_row.items():
-            result.name = result.name.replace("<%s>" % name, value)
-            if result.text:
-                result.text = result.text.replace("<%s>" % name, value)
-            if result.table:
-                for row in result.table:
-                    for i, cell in enumerate(row.cells):
-                        row.cells[i] = cell.replace("<%s>" % name, value)
-        return result
+        """Clone a new step from this one, used for ScenarioOutline.
+        Replace ScenarioOutline placeholders w/ values.
+
+        :param table_row:  Placeholder data for example row.
+        :return: Cloned, adapted step object.
+
+        .. note:: Deprecating
+            Use 'ScenarioOutlineBuilder.make_step_for_row()' instead.
+        """
+        import warnings
+        warnings.warn("Use 'ScenarioOutline.make_step_for_row()' instead",
+                      PendingDeprecationWarning, stacklevel=2)
+        outline_step = self
+        return ScenarioOutlineBuilder.make_step_for_row(outline_step, table_row)
 
     def run(self, runner, quiet=False, capture=True):
-        # -- RESET: Run information.
-        self.error_message = None
-        self.exception = None
+        # pylint: disable=too-many-branches, too-many-statements
+        # -- RESET: Run-time information.
+        self.exception = self.exc_traceback = self.error_message = None
+        self.status = "untested"
+        self.hook_failed = False
 
-        # access module var here to allow test mocking to work
-        match = step_registry.registry.find_match(self)
+        match = runner.step_registry.find_match(self)
         if match is None:
             runner.undefined_steps.append(self)
             if not quiet:
                 for formatter in runner.formatters:
                     formatter.match(NoMatch())
 
-            self.status = 'undefined'
+            self.status = "undefined"
             if not quiet:
                 for formatter in runner.formatters:
                     formatter.result(self)
-
             return False
 
         keep_going = True
+        error = u""
 
         if not quiet:
             for formatter in runner.formatters:
                 formatter.match(match)
 
-        runner.run_hook('before_step', runner.context, self)
+        runner.run_hook("before_step", runner.context, self)
         if capture:
             runner.start_capture()
 
@@ -1170,45 +1277,56 @@ class Step(BasicStatement, Replayable):
             runner.context.text = self.text
             runner.context.table = self.table
             match.run(runner.context)
-            self.status = 'passed'
-        except AssertionError, e:
-            self.status = 'failed'
-            self.exception = e
-            if e.args:
-                error = u'Assertion Failed: %s' % e
-            else:
-                # no assertion text; format the exception
-                error = traceback.format_exc()
-        except KeyboardInterrupt, e:
+            if self.status == "untested":
+                # -- NOTE: Executed step may have skipped scenario and itself.
+                self.status = "passed"
+        except KeyboardInterrupt as e:
             runner.aborted = True
             error = u"ABORTED: By user (KeyboardInterrupt)."
-            self.status = 'failed'
-            self.exception = e
-        except Exception, e:
-            self.status = 'failed'
-            error = traceback.format_exc()
-            self.exception = e
+            self.status = "failed"
+            self.store_exception_context(e)
+        except AssertionError as e:
+            self.status = "failed"
+            self.store_exception_context(e)
+            if e.args:
+                message = _text(e)
+                error = u"Assertion Failed: "+ message
+            else:
+                # no assertion text; format the exception
+                error = _text(traceback.format_exc())
+        except Exception as e:      # pylint: disable=broad-except
+            self.status = "failed"
+            error = _text(traceback.format_exc())
+            self.store_exception_context(e)
 
         self.duration = time.time() - start
         if capture:
             runner.stop_capture()
 
+        runner.run_hook("after_step", runner.context, self)
+        if self.hook_failed:
+            self.status = "failed"
+
         # flesh out the failure with details
-        if self.status == 'failed':
+        if self.status == "failed":
+            assert isinstance(error, six.text_type)
             if capture:
                 # -- CAPTURE-ONLY: Non-nested step failures.
                 if runner.config.stdout_capture:
                     output = runner.stdout_capture.getvalue()
                     if output:
-                        error += '\nCaptured stdout:\n' + output
+                        output = _text(output)
+                        error += u"\nCaptured stdout:\n" + output
                 if runner.config.stderr_capture:
                     output = runner.stderr_capture.getvalue()
                     if output:
-                        error += '\nCaptured stderr:\n' + output
+                        output = _text(output)
+                        error += u"\nCaptured stderr:\n" + output
                 if runner.config.log_capture:
                     output = runner.log_capture.getvalue()
                     if output:
-                        error += '\nCaptured logging:\n' + output
+                        output = _text(output)
+                        error += u"\nCaptured logging:\n" + output
             self.error_message = error
             keep_going = False
 
@@ -1216,12 +1334,11 @@ class Step(BasicStatement, Replayable):
             for formatter in runner.formatters:
                 formatter.result(self)
 
-        runner.run_hook('after_step', runner.context, self)
         return keep_going
 
 
 class Table(Replayable):
-    '''A `table`_ extracted from a *feature file*.
+    """A `table`_ extracted from a *feature file*.
 
     Table instance data is accessible using a number of methods:
 
@@ -1249,9 +1366,7 @@ class Table(Replayable):
     are compared.
 
     .. _`table`: gherkin.html#table
-    '''
-    # pylint: disable=R0921
-    #   R0921   Abstract class is not referenced.
+    """
     type = "table"
 
     def __init__(self, headings, line=None, rows=None):
@@ -1267,8 +1382,7 @@ class Table(Replayable):
         self.rows.append(Row(self.headings, row, line))
 
     def add_column(self, column_name, values=None, default_value=u""):
-        """
-        Adds a new column to this table.
+        """Adds a new column to this table.
         Uses :param:`default_value` for new cells (if :param:`values` are
         not provided). param:`values` are extended with :param:`default_value`
         if values list is smaller than the number of table rows.
@@ -1321,8 +1435,7 @@ class Table(Replayable):
         return self.headings.index(column_name)
 
     def require_column(self, column_name):
-        """
-        Require that a column exists in the table.
+        """Require that a column exists in the table.
         Raise an AssertionError if the column does not exist.
 
         :param column_name: Name of new column (as string).
@@ -1339,8 +1452,7 @@ class Table(Replayable):
             self.require_column(column_name)
 
     def ensure_column_exists(self, column_name):
-        """
-        Ensures that a column with the given name exists.
+        """Ensures that a column with the given name exists.
         If the column does not exist, the column is added.
 
         :param column_name: Name of column (as string).
@@ -1370,7 +1482,7 @@ class Table(Replayable):
         return True
 
     def __ne__(self, other):
-        return not self == other
+        return not self.__eq__(other)
 
     def __iter__(self):
         return iter(self.rows)
@@ -1379,7 +1491,7 @@ class Table(Replayable):
         return self.rows[index]
 
     def assert_equals(self, data):
-        '''Assert that this table's cells are the same as the supplied "data".
+        """Assert that this table's cells are the same as the supplied "data".
 
         The data passed in must be a list of lists giving:
 
@@ -1390,13 +1502,13 @@ class Table(Replayable):
             ]
 
         If the cells do not match then a useful AssertionError will be raised.
-        '''
+        """
         assert self == data
         raise NotImplementedError
 
 
 class Row(object):
-    '''One row of a `table`_ parsed from a *feature file*.
+    """One row of a `table`_ parsed from a *feature file*.
 
     Row data is accessible using a number of methods:
 
@@ -1404,7 +1516,7 @@ class Row(object):
       Iterating over the Row will yield the individual cells as strings.
 
     **named access**
-      Individual cells may be accessed by heading name; row['name'] would give
+      Individual cells may be accessed by heading name; row["name"] would give
       the cell value for the column with heading "name".
 
     **indexed access**
@@ -1425,12 +1537,12 @@ class Row(object):
     compared.
 
     .. _`table`: gherkin.html#table
-    '''
+    """
     def __init__(self, headings, cells, line=None, comments=None):
         self.headings = headings
         self.comments = comments
         for c in cells:
-            assert isinstance(c, unicode)
+            assert isinstance(c, six.text_type)
         self.cells = cells
         self.line = line
 
@@ -1445,13 +1557,13 @@ class Row(object):
         return self.cells[index]
 
     def __repr__(self):
-        return '<Row %r>' % (self.cells,)
+        return "<Row %r>" % (self.cells,)
 
     def __eq__(self, other):
         return self.cells == other.cells
 
     def __ne__(self, other):
-        return not self == other
+        return not self.__eq__(other)
 
     def __len__(self):
         return len(self.cells)
@@ -1469,34 +1581,74 @@ class Row(object):
             return default
 
     def as_dict(self):
-        """
-        Converts the row and its cell data into a dictionary.
+        """Converts the row and its cell data into a dictionary.
         :return: Row data as dictionary (without comments, line info).
         """
         from behave.compat.collections import OrderedDict
         return OrderedDict(self.items())
 
 
-class Tag(unicode):
-    '''Tags appear may be associated with Features or Scenarios.
+class Tag(six.text_type):
+    """Tags appear may be associated with Features or Scenarios.
 
     They're a subclass of regular strings (unicode pre-Python 3) with an
     additional ``line`` number attribute (where the tag was seen in the source
     feature file.
 
-    See `controlling things with tags`_.
-    '''
-    # pylint: disable=R0904
-    #   R0904   Too many public methods (from baseclass)
+    See :ref:`controlling things with tags`.
+    """
+    allowed_chars = u"._-=:"    # In addition to aplha-numerical chars.
+    quoting_chars = ("'", '"', "<", ">")
 
     def __new__(cls, name, line):
-        o = unicode.__new__(cls, name)
+        o = six.text_type.__new__(cls, name)
         o.line = line
         return o
 
+    @classmethod
+    def make_name(cls, text, unescape=False, allowed_chars=None):
+        """Translate text into a "valid tag" without whitespace, etc.
+        Translation rules are:
+          * alnum chars => same, kept
+          * space chars => "_"
+          * other chars => deleted
 
-class Text(unicode):
-    '''Store multiline text from a Step definition.
+        Preserve following characters (in addition to alnums, like: A-z, 0-9):
+          * dots        => "." (support: dotted-names, active-tag name schema)
+          * minus       => "-" (support: dashed-names)
+          * underscore  => "_"
+          * equal       => "=" (support: active-tag name schema)
+          * colon       => ":" (support: active-tag name schema or similar)
+
+        :param text: Unicode text as input for name.
+        :param unescape: Optional flag to unescape some chars (default: false)
+        :param allowed_chars: Optional string with additional preserved chars.
+        :return: Unicode name that can be used as tag.
+        """
+        assert isinstance(text, six.text_type)
+        if allowed_chars is None:
+            allowed_chars = cls.allowed_chars
+
+        if unescape:
+            # -- UNESCAPE: Some escaped sequences
+            text = text.replace("\\t", "\t").replace("\\n", "\n")
+        chars = []
+        for char in text:
+            if char.isalnum() or (allowed_chars and char in allowed_chars):
+                chars.append(char)
+            elif char.isspace():
+                chars.append(u"_")
+            elif char in cls.quoting_chars:
+                pass    # -- NORMALIZE: Remove any quoting chars.
+            # -- MAYBE:
+            # else:
+            #     # -- OTHERWISE: Accept gracefully any other character.
+            #     chars.append(char)
+        return u"".join(chars)
+
+
+class Text(six.text_type):
+    """Store multiline text from a Step definition.
 
     The attributes are:
 
@@ -1506,16 +1658,12 @@ class Text(unicode):
 
     .. attribute:: content_type
 
-       Currently only 'text/plain'.
-    '''
-    # pylint: disable=R0904
-    #   R0904   Too many public methods (from baseclass)
-    __pychecker__ = "missingattrs=line,content_type"
-
-    def __new__(cls, value, content_type=u'text/plain', line=0):
-        assert isinstance(value, unicode)
-        assert isinstance(content_type, unicode)
-        o = unicode.__new__(cls, value)
+       Currently only "text/plain".
+    """
+    def __new__(cls, value, content_type=u"text/plain", line=0):
+        assert isinstance(value, six.text_type)
+        assert isinstance(content_type, six.text_type)
+        o = six.text_type.__new__(cls, value)
         o.content_type = content_type
         o.line = line
         return o
@@ -1524,15 +1672,15 @@ class Text(unicode):
         line_count = len(self.splitlines())
         return (self.line, self.line + line_count + 1)
 
-    def replace(self, old, new):
-        return Text(super(Text, self).replace(old, new), self.content_type,
+    def replace(self, old, new, count=-1):
+        return Text(super(Text, self).replace(old, new, count), self.content_type,
                     self.line)
 
     def assert_equals(self, expected):
-        '''Assert that my text is identical to the "expected" text.
+        """Assert that my text is identical to the "expected" text.
 
-        A nice context diff will be displayed if they do not match.'
-        '''
+        A nice context diff will be displayed if they do not match.
+        """
         if self == expected:
             return True
         diff = []
@@ -1540,94 +1688,15 @@ class Text(unicode):
                                          expected.splitlines()):
             diff.append(line)
         # strip unnecessary diff prefix
-        diff = ['Text does not match:'] + diff[3:]
-        raise AssertionError('\n'.join(diff))
+        diff = ["Text does not match:"] + diff[3:]
+        raise AssertionError("\n".join(diff))
 
 
-class Match(Replayable):
-    '''An parameter-matched *feature file* step name extracted using
-    step decorator `parameters`_.
-
-    .. attribute:: func
-
-       The step function that this match will be applied to.
-
-    .. attribute:: arguments
-
-       A list of :class:`behave.model.Argument` instances containing the
-       matched parameters from the step name.
-    '''
-    type = "match"
-
-    def __init__(self, func, arguments=None):
-        super(Match, self).__init__()
-        self.func = func
-        self.arguments = arguments
-        self.location = None
-        if func:
-            self.location = self.make_location(func)
-
-    def __repr__(self):
-        if self.func:
-            func_name = self.func.__name__
-        else:
-            func_name = '<no function>'
-        return '<Match %s, %s>' % (func_name, self.location)
-
-    def __eq__(self, other):
-        if not isinstance(other, Match):
-            return False
-        return (self.func, self.location) == (other.func, other.location)
-
-    def with_arguments(self, arguments):
-        match = copy.copy(self)
-        match.arguments = arguments
-        return match
-
-    def run(self, context):
-        args = []
-        kwargs = {}
-        for arg in self.arguments:
-            if arg.name is not None:
-                kwargs[arg.name] = arg.value
-            else:
-                args.append(arg.value)
-
-        # pylint: disable=W0142
-        #   W0142   Used * or ** magic
-        with context.user_mode():
-            self.func(context, *args, **kwargs)
-
-    @staticmethod
-    def make_location(step_function):
-        '''
-        Extracts the location information from the step function and builds
-        the location string (schema: "{source_filename}:{line_number}").
-
-        :param step_function: Function whose location should be determined.
-        :return: Step function location as string.
-        '''
-        filename = relpath(step_function.func_code.co_filename, os.getcwd())
-        line_number = step_function.func_code.co_firstlineno
-        return FileLocation(filename, line_number)
-
-
-class NoMatch(Match):
-    '''
-    Used for an "undefined step" when it can not be matched with a
-    step definition.
-    '''
-
-    def __init__(self):
-        Match.__init__(self, func=None)
-        self.func = None
-        self.arguments = []
-        self.location = None
-
-
+# -----------------------------------------------------------------------------
+# UTILITY FUNCTIONS:
+# -----------------------------------------------------------------------------
 def reset_model(model_elements):
-    """
-    Reset the test run information stored in model elements.
+    """Reset the test run information stored in model elements.
 
     :param model_elements:  List of model elements (Feature, Scenario, ...)
     """

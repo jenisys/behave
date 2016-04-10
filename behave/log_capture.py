@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import absolute_import, print_function
 import logging
 import functools
 from logging.handlers import BufferingHandler
 import re
-
-from behave.configuration import ConfigError
 
 
 class RecordFilter(object):
@@ -58,9 +57,6 @@ class LoggingCapture(BufferingHandler):
     .. __: behave.html#command-line-arguments
 
     '''
-    # pylint: disable=R0904
-    #   R0904   Too many public methods
-
     def __init__(self, config, level=None):
         BufferingHandler.__init__(self, 1000)
         self.config = config
@@ -90,7 +86,7 @@ class LoggingCapture(BufferingHandler):
         if config.logging_filter:
             self.addFilter(RecordFilter(config.logging_filter))
 
-    def __nonzero__(self):
+    def __bool__(self):
         return bool(self.buffer)
 
     def flush(self):
@@ -227,8 +223,8 @@ def capture(*args, **kw):
                 h.abandon()
             v = h.getvalue()
             if v:
-                print 'Captured Logging:'
-                print v
+                print('Captured Logging:')
+                print(v)
         return f
 
     if not args:

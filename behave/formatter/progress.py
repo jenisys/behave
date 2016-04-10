@@ -9,9 +9,12 @@ A "dot" character that represents the result status is printed after
 executing a scope item.
 """
 
+from __future__ import absolute_import
 from behave.formatter.base import Formatter
-from behave.compat.os_path import relpath
 import os
+import os.path
+import six
+
 
 # -----------------------------------------------------------------------------
 # CLASS: ProgressFormatterBase
@@ -31,6 +34,7 @@ class ProgressFormatterBase(Formatter):
         "untested":  "_",
         "undefined": "U",
     }
+    show_timings = False
 
     def __init__(self, stream_opener, config):
         super(ProgressFormatterBase, self).__init__(stream_opener, config)
@@ -40,6 +44,7 @@ class ProgressFormatterBase(Formatter):
         self.failures = []
         self.current_feature  = None
         self.current_scenario = None
+        self.show_timings = config.show_timings and self.show_timings
 
     def reset(self):
         self.steps = []
@@ -50,8 +55,8 @@ class ProgressFormatterBase(Formatter):
     # -- FORMATTER API:
     def feature(self, feature):
         self.current_feature = feature
-        short_filename = relpath(feature.filename, os.getcwd())
-        self.stream.write("%s  " % short_filename)
+        short_filename = os.path.relpath(feature.filename, os.getcwd())
+        self.stream.write("%s  " % six.text_type(short_filename))
         self.stream.flush()
 
     def background(self, background):
@@ -62,7 +67,7 @@ class ProgressFormatterBase(Formatter):
         Process the next scenario.
         But first allow to report the status on the last scenario.
         """
-        self.report_scenario_progress()
+        self.report_scenario_completed()
         self.current_scenario = scenario
 
     def scenario_outline(self, outline):
@@ -80,8 +85,8 @@ class ProgressFormatterBase(Formatter):
         Called at end of a feature.
         It would be better to have a hook that is called after all features.
         """
-        self.report_scenario_progress()
-        self.stream.write('\n')
+        self.report_scenario_completed()
+        self.report_feature_completed()
         self.report_failures()
         self.stream.flush()
         self.reset()
@@ -103,10 +108,30 @@ class ProgressFormatterBase(Formatter):
         """
         pass
 
+    def report_feature_completed(self):
+        """Hook called when a feature is completed to perform the last tasks.
+        """
+        pass
+
+    def report_scenario_completed(self):
+        """Hook called when a scenario is completed to perform the last tasks.
+        """
+        self.report_scenario_progress()
+
+    def report_feature_duration(self):
+        if self.show_timings and self.current_feature:
+            self.stream.write(u"  # %.3fs" % self.current_feature.duration)
+        self.stream.write("\n")
+
+    def report_scenario_duration(self):
+        if self.show_timings and self.current_scenario:
+            self.stream.write(u"  # %.3fs" % self.current_scenario.duration)
+        self.stream.write("\n")
+
     def report_failures(self):
         if self.failures:
             separator = "-" * 80
-            self.stream.write(u"\n%s\n" % separator)
+            self.stream.write(u"%s\n" % separator)
             for result in self.failures:
                 self.stream.write(u"FAILURE in step '%s':\n" % result.name)
                 self.stream.write(u"  Feature:  %s\n" % result.feature.name)
@@ -134,15 +159,16 @@ class ScenarioProgressFormatter(ProgressFormatterBase):
         if not self.current_scenario:
             return  # SKIP: No results to report for first scenario.
         # -- NORMAL-CASE:
-        # XXX-JE-TODO
         status = self.current_scenario.status
         dot_status = self.dot_status[status]
         if status == "failed":
-            # XXX-JE-TODO: self.failures.append(result)
+            # MAYBE TODO: self.failures.append(result)
             pass
         self.stream.write(dot_status)
         self.stream.flush()
 
+    def report_feature_completed(self):
+        self.report_feature_duration()
 
 # -----------------------------------------------------------------------------
 # CLASS: StepProgressFormatter
@@ -169,6 +195,10 @@ class StepProgressFormatter(ProgressFormatterBase):
             self.failures.append(result)
         self.stream.write(dot_status)
         self.stream.flush()
+
+    def report_feature_completed(self):
+        self.report_feature_duration()
+
 
 # -----------------------------------------------------------------------------
 # CLASS: ScenarioStepProgressFormatter
@@ -198,43 +228,53 @@ class ScenarioStepProgressFormatter(StepProgressFormatter):
     # -- FORMATTER API:
     def feature(self, feature):
         self.current_feature = feature
-        short_filename = relpath(feature.filename, os.getcwd())
+        short_filename = os.path.relpath(feature.filename, os.getcwd())
         self.stream.write(u"%s    # %s" % (feature.name, short_filename))
 
     def scenario(self, scenario):
-        """
-        Process the next scenario.
-        """
+        """Process the next scenario."""
         # -- LAST SCENARIO: Report failures (if any).
-        self.report_failures()
-        self.failures = []
+        self.report_scenario_completed()
 
         # -- NEW SCENARIO:
+        assert not self.failures
         self.current_scenario = scenario
         scenario_name = scenario.name
         if scenario_name:
             scenario_name += " "
-        self.stream.write(u'\n%s%s ' % (self.scenario_prefix, scenario_name))
+        self.stream.write(u"%s%s " % (self.scenario_prefix, scenario_name))
         self.stream.flush()
 
-    def eof(self):
+    # -- DISABLED:
+    # def eof(self):
+    #     has_scenarios = self.current_feature and self.current_scenario
+    #     super(ScenarioStepProgressFormatter, self).eof()
+    #     if has_scenarios:
+    #         # -- EMPTY-LINE between 2 features.
+    #         self.stream.write("\n")
+
+    # -- PROGRESS FORMATTER DETAILS:
+    # @overriden
+    def report_feature_completed(self):
+        # -- SKIP: self.report_feature_duration()
         has_scenarios = self.current_feature and self.current_scenario
-        super(ScenarioStepProgressFormatter, self).eof()
         if has_scenarios:
             # -- EMPTY-LINE between 2 features.
             self.stream.write("\n")
 
-    # -- PROGRESS FORMATTER DETAILS:
+    def report_scenario_completed(self):
+        self.report_scenario_progress()
+        self.report_scenario_duration()
+        self.report_failures()
+        self.failures = []
+
     def report_failures(self):
         if self.failures:
             separator = "-" * 80
-            self.stream.write(u"\n%s\n" % separator)
+            self.stream.write(u"%s\n" % separator)
             for failure in self.failures:
                 self.stream.write(u"FAILURE in step '%s' (%s):\n" % \
                                   (failure.name, failure.location))
                 self.stream.write(u"%s\n" % failure.error_message)
                 self.stream.write(u"%s\n" % separator)
             self.stream.flush()
-
-
-

@@ -1,37 +1,34 @@
-# -*- coding: utf-8 -*-
-# pylint: disable=C0103,C0301,R0201,W0401,W0614
-#   C0103   Invalid name (setUp(), ...)
-#   C0301   Line too long
-#   R0201   Method could be a function
-#   W0401   Wildcard import
-#   W0614   Unused import ... from wildcard import
-
-from __future__ import with_statement
-
+# -*- coding: UTF-8 -*-
+# pylint: disable=unused-wildcard-import
+from __future__ import absolute_import, with_statement
 from mock import Mock, patch
-from nose.tools import *
+from nose.tools import *        # pylint: disable=wildcard-import
+from six.moves import range     # pylint: disable=redefined-builtin
 from behave import step_registry
 
+
 class TestStepRegistry(object):
+    # pylint: disable=invalid-name, no-self-use
+
     def test_add_step_definition_adds_to_lowercased_keyword(self):
         registry = step_registry.StepRegistry()
-        with patch('behave.matchers.get_matcher') as get_matcher:
+        # -- MONKEYPATCH-PROBLEM:
+        #  with patch('behave.matchers.get_matcher') as get_matcher:
+        with patch('behave.step_registry.get_matcher') as get_matcher:
             func = lambda x: -x
             string = 'just a test string'
             magic_object = object()
             get_matcher.return_value = magic_object
 
-            for step_type in registry.steps.keys():
+            for step_type in list(registry.steps.keys()):
                 l = []
                 registry.steps[step_type] = l
 
                 registry.add_step_definition(step_type.upper(), string, func)
-
                 get_matcher.assert_called_with(func, string)
                 eq_(l, [magic_object])
 
     def test_find_match_with_specific_step_type_also_searches_generic(self):
-        __pychecker__ = "no-missingattrs=match"
         registry = step_registry.StepRegistry()
 
         given_mock = Mock()
@@ -52,7 +49,6 @@ class TestStepRegistry(object):
         step_mock.match.assert_called_with(step.name)
 
     def test_find_match_with_no_match_returns_none(self):
-        __pychecker__ = "unusednames=x"
         registry = step_registry.StepRegistry()
 
         step_defs = [Mock() for x in range(0, 10)]
@@ -68,7 +64,6 @@ class TestStepRegistry(object):
         assert registry.find_match(step) is None
 
     def test_find_match_with_a_match_returns_match(self):
-        __pychecker__ = "unusednames=x"
         registry = step_registry.StepRegistry()
 
         step_defs = [Mock() for x in range(0, 10)]
@@ -87,6 +82,7 @@ class TestStepRegistry(object):
         for mock in step_defs[6:]:
             eq_(mock.match.call_count, 0)
 
+    # pylint: disable=line-too-long
     @patch.object(step_registry.registry, 'add_step_definition')
     def test_make_step_decorator_ends_up_adding_a_step_definition(self, add_step_definition):
         step_type = object()
