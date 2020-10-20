@@ -1,4 +1,5 @@
-# -*- coding -*-
+# -*- coding: UTF-8 -*-
+# pylint: disable=invalid-name, bad-continuation, bad-whitespace
 """
 Provides step definitions to:
 
@@ -10,20 +11,28 @@ TODO:
 """
 
 from __future__ import absolute_import, print_function
-from behave import given, when, then, step, matchers
-from behave4cmd0 import command_shell, command_util, pathutil, textutil
-from behave4cmd0.pathutil import posixpath_normpath
 import contextlib
 import difflib
 import os
 import shutil
-from hamcrest import assert_that, equal_to, is_not, contains_string
+from behave import given, when, then, step, matchers # pylint: disable=no-name-in-module
+from hamcrest import assert_that, equal_to, is_not
+from behave4cmd0 import command_shell, command_util, pathutil, textutil
+from behave4cmd0.pathutil import posixpath_normpath
+from behave4cmd0.command_shell_proc import \
+    TextProcessor, BehaveWinCommandOutputProcessor
+# NOT-USED: from hamcrest import contains_string
+
 
 # -----------------------------------------------------------------------------
 # INIT:
 # -----------------------------------------------------------------------------
 matchers.register_type(int=int)
 DEBUG = False
+file_contents_normalizer = None
+if BehaveWinCommandOutputProcessor.enabled:
+    file_contents_normalizer = TextProcessor(BehaveWinCommandOutputProcessor())
+
 
 # -----------------------------------------------------------------------------
 # UTILITIES:
@@ -77,12 +86,13 @@ def on_error_print_details(actual, expected):
 # -----------------------------------------------------------------------------
 @given(u'a new working directory')
 def step_a_new_working_directory(context):
-    """
-    Creates a new, empty working directory
-    """
+    """Creates a new, empty working directory."""
     command_util.ensure_context_attribute_exists(context, "workdir", None)
+    # MAYBE: command_util.ensure_workdir_not_exists(context)
     command_util.ensure_workdir_exists(context)
+    # OOPS:
     shutil.rmtree(context.workdir, ignore_errors=True)
+    command_util.ensure_workdir_exists(context)
 
 @given(u'I use the current directory as working directory')
 def step_use_curdir_as_working_directory(context):
@@ -90,6 +100,29 @@ def step_use_curdir_as_working_directory(context):
     Uses the current directory as working directory
     """
     context.workdir = os.path.abspath(".")
+    command_util.ensure_workdir_exists(context)
+
+@step(u'I use the directory "{directory}" as working directory')
+def step_use_directory_as_working_directory(context, directory):
+    """Uses the directory as new working directory"""
+    command_util.ensure_context_attribute_exists(context, "workdir", None)
+    current_workdir = context.workdir
+    if not current_workdir:
+        current_workdir = os.getcwd()
+
+    if not os.path.isabs(directory):
+        new_workdir = os.path.join(current_workdir, directory)
+        exists_relto_current_dir = os.path.isdir(directory)
+        exists_relto_current_workdir = os.path.isdir(new_workdir)
+        if exists_relto_current_workdir or not exists_relto_current_dir:
+            # -- PREFER: Relative to current workdir
+            workdir = new_workdir
+        else:
+            assert exists_relto_current_workdir
+            workdir = directory
+        workdir = os.path.abspath(workdir)
+
+    context.workdir = workdir
     command_util.ensure_workdir_exists(context)
 
 # -----------------------------------------------------------------------------
@@ -133,6 +166,7 @@ def step_an_empty_file_named_filename(context, filename):
 # STEPS: Run commands
 # -----------------------------------------------------------------------------
 @when(u'I run "{command}"')
+@when(u'I run `{command}`')
 def step_i_run_command(context, command):
     """
     Run a command as subprocess, collect its output and returncode.
@@ -145,6 +179,7 @@ def step_i_run_command(context, command):
         print(u"run_command.output {0}".format(context.command_result.output))
 
 @when(u'I successfully run "{command}"')
+@when(u'I successfully run `{command}`')
 def step_i_successfully_run_command(context, command):
     step_i_run_command(context, command)
     step_it_should_pass(context)
@@ -249,6 +284,26 @@ def step_command_output_should_not_contain_text(context, text):
         textutil.assert_normtext_should_not_contain(actual_output, expected_text)
 
 
+@then(u'the command output should contain "{text}" {count:d} times')
+def step_command_output_should_contain_text_multiple_times(context, text, count):
+    '''
+    EXAMPLE:
+        ...
+        Then the command output should contain "TEXT" 3 times
+    '''
+    assert count >= 0
+    expected_text = text
+    if "{__WORKDIR__}" in expected_text or "{__CWD__}" in expected_text:
+        expected_text = textutil.template_substitute(text,
+             __WORKDIR__ = posixpath_normpath(context.workdir),
+             __CWD__     = posixpath_normpath(os.getcwd())
+        )
+    actual_output = context.command_result.output
+    with on_assert_failed_print_details(actual_output, expected_text):
+        textutil.assert_normtext_should_contain_multiple_times(actual_output,
+                                                               expected_text,
+                                                               count)
+
 @then(u'the command output should contain exactly "{text}"')
 def step_command_output_should_contain_exactly_text(context, text):
     """
@@ -313,6 +368,21 @@ def step_command_output_should_not_contain(context):
     assert context.text is not None, "REQUIRE: multi-line text"
     step_command_output_should_not_contain_text(context, context.text.strip())
 
+@then(u'the command output should contain {count:d} times')
+def step_command_output_should_contain_multiple_times(context, count):
+    '''
+    EXAMPLE:
+        ...
+        when I run "behave ..."
+        then it should pass
+        and  the command output should contain 2 times:
+            """
+            TEXT
+            """
+    '''
+    assert context.text is not None, "REQUIRE: multi-line text"
+    step_command_output_should_contain_text_multiple_times(context,
+                                                           context.text, count)
 
 @then(u'the command output should contain exactly')
 def step_command_output_should_contain_exactly_with_multiline_text(context):
@@ -337,6 +407,15 @@ def step_remove_directory(context, directory):
     if os.path.isdir(path_):
         shutil.rmtree(path_, ignore_errors=True)
     assert_that(not os.path.isdir(path_))
+
+@given(u'I ensure that the directory "{directory}" exists')
+def step_given_ensure_that_the_directory_exists(context, directory):
+    path_ = directory
+    if not os.path.isabs(directory):
+        path_ = os.path.join(context.workdir, os.path.normpath(directory))
+    if not os.path.isdir(path_):
+        os.makedirs(path_)
+    assert_that(os.path.isdir(path_))
 
 @given(u'I ensure that the directory "{directory}" does not exist')
 def step_given_the_directory_should_not_exist(context, directory):
@@ -404,6 +483,7 @@ def step_file_named_filename_exists(context, filename):
     step_file_named_filename_should_exist(context, filename)
 
 @step(u'a file named "{filename}" does not exist')
+@step(u'the file named "{filename}" does not exist')
 def step_file_named_filename_does_not_exist(context, filename):
     """
     Verifies that a file with this filename does not exist.
@@ -427,6 +507,16 @@ def step_file_named_filename_should_not_exist(context, filename):
     filename_ = pathutil.realpath_with_context(filename, context)
     assert_that(not os.path.exists(filename_))
 
+@step(u'I remove the file "{filename}"')
+def step_remove_file(context, filename):
+    path_ = filename
+    if not os.path.isabs(filename):
+        path_ = os.path.join(context.workdir, os.path.normpath(filename))
+    if os.path.exists(path_) and os.path.isfile(path_):
+        os.remove(path_)
+    assert_that(not os.path.isfile(path_))
+
+
 # -----------------------------------------------------------------------------
 # STEPS FOR FILE CONTENTS:
 # -----------------------------------------------------------------------------
@@ -440,6 +530,9 @@ def step_file_should_contain_text(context, filename, text):
         )
     file_contents = pathutil.read_file_contents(filename, context=context)
     file_contents = file_contents.rstrip()
+    if file_contents_normalizer:
+        # -- HACK: Inject TextProcessor as text normalizer
+        file_contents = file_contents_normalizer(file_contents)
     with on_assert_failed_print_details(file_contents, expected_text):
         textutil.assert_normtext_should_contain(file_contents, expected_text)
 
@@ -449,7 +542,7 @@ def step_file_should_not_contain_text(context, filename, text):
     file_contents = pathutil.read_file_contents(filename, context=context)
     file_contents = file_contents.rstrip()
     textutil.assert_normtext_should_not_contain(file_contents, text)
-    # XXX assert_that(file_contents, is_not(contains_string(text)))
+    # DISABLED: assert_that(file_contents, is_not(contains_string(text)))
 
 
 @then(u'the file "{filename}" should contain')
@@ -482,4 +575,3 @@ def step_I_remove_the_environment_variable(context, env_name):
     os.environ[env_name] = ""
     del context.environ[env_name]
     del os.environ[env_name]
-

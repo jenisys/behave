@@ -2,25 +2,26 @@
 Behave
 ======
 
-.. image:: https://badges.gitter.im/Join%20Chat.svg
-   :alt: Join the chat at https://gitter.im/behave/behave
-   :target: https://gitter.im/behave/behave?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
-
 .. image:: https://img.shields.io/travis/behave/behave/master.svg
     :target: https://travis-ci.org/behave/behave
     :alt: Travis CI Build Status
+
+.. image:: https://readthedocs.org/projects/behave/badge/?version=latest
+    :target: http://behave.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
 
 .. image:: https://img.shields.io/pypi/v/behave.svg
     :target: https://pypi.python.org/pypi/behave
     :alt: Latest Version
 
-.. image:: https://img.shields.io/pypi/dm/behave.svg
-    :target: https://pypi.python.org/pypi/behave
-    :alt: Downloads
-
 .. image:: https://img.shields.io/pypi/l/behave.svg
     :target: https://pypi.python.org/pypi/behave/
     :alt: License
+
+.. image:: https://badges.gitter.im/Join%20Chat.svg
+   :alt: Join the chat at https://gitter.im/behave/behave
+   :target: https://gitter.im/behave/behave?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
+
 
 .. |logo| image:: https://raw.github.com/behave/behave/master/docs/_static/behave_logo1.png
 
@@ -94,19 +95,24 @@ we recommend the `tutorial`_ and then the `feature testing language`_ and
 `api`_ references.
 
 
-.. _`Install *behave*.`: http://pythonhosted.org/behave/install.html
-.. _`tutorial`: http://pythonhosted.org/behave/tutorial.html#features
-.. _`feature testing language`: http://pythonhosted.org/behave/gherkin.html
-.. _`api`: http://pythonhosted.org/behave/api.html
+.. _`Install *behave*.`: http://behave.readthedocs.io/en/stable/install.html
+.. _`tutorial`: http://behave.readthedocs.io/en/stable/tutorial.html#features
+.. _`feature testing language`: http://behave.readthedocs.io/en/stable/gherkin.html
+.. _`api`: http://behave.readthedocs.io/en/stable/api.html
 
 
 More Information
 -------------------------------------------------------------------------------
 
-* `behave documentation`_ (`latest changes`_)
+* `behave documentation`_: `latest edition`_, `stable edition`_, `PDF`_
 * `behave.example`_: Behave Examples and Tutorials (docs, executable examples).
+* `changelog`_ (latest changes)
 
-.. _behave documentation: http://pythonhosted.org/behave/
-.. _latest changes: https://github.com/behave/behave/blob/master/CHANGES.rst
+
+.. _behave documentation: http://behave.readthedocs.io/
+.. _changelog:      https://github.com/behave/behave/blob/master/CHANGES.rst
 .. _behave.example: https://github.com/behave/behave.example
 
+.. _`latest edition`: http://behave.readthedocs.io/en/latest/
+.. _`stable edition`: http://behave.readthedocs.io/en/stable/
+.. _PDF:              https://media.readthedocs.org/pdf/behave/latest/behave.pdf

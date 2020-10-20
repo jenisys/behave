@@ -1,36 +1,42 @@
 language: python
 sudo: false
+dist: xenial   # required for Python >= 3.7
 python:
-  - "2.6"
+  - "3.8-dev"
+  - "3.7"
   - "2.7"
-  - "3.3"
-  - "3.4"
-  - "3.5.1"
-  - "pypy"
-  - "3.5"
-  
-# DISABLED: - "nightly"
-# -- AVOID:  python: "3.5" => python 3.5.0
-# Seems to have a problem with unit tests in exception traceback.
-# Behaviour is fixed in python 3.5.1
 
-# -- TEST-BALLON: Check if Python 3.5 is actually Python 3.5.1 or newer
+
+# -- DISABLE-TEMPORARILY: Ensure faster builds
+#  - "3.6"
+#  - "3.5"
+#  - "pypy"
+#  - "pypy3"
+
+# -- DISABLED:
+#  - "nightly"
+#
+# NOW SUPPORTED: "3.5" => python 3.5.2 (>= 3.5.1)
+# NOTE: nightly = 3.7-dev
+
+# -- TEST-BALLON: Check if Python 3.6 is actually Python 3.5.1 or newer
 matrix:
   allow_failures:
-    - python: "3.5"
+    - python: "3.8-dev"
+    - python: "nightly"
 
 cache:
   directories:
     - $HOME/.cache/pip
 
 install:
-  - travis_retry pip install -q mock nose PyHamcrest
-  - travis_retry pip install -q -U pytest
+  - travis_retry pip install -q -r py.requirements/ci.travis.txt
+  - pip show setuptools
   - python setup.py -q install
 
 script:
   - python --version
-  - py.test test tests
+  - pytest tests
   - behave -f progress --junit features/
   - behave -f progress --junit tools/test-features/
   - behave -f progress --junit issue.features/

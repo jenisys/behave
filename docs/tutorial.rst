@@ -23,19 +23,19 @@ file called "tutorial.py" containing:
 
 .. code-block:: python
 
-  from behave import *
+    from behave import *
 
-  @given('we have behave installed')
-  def step_impl(context):
-      pass
+    @given('we have behave installed')
+    def step_impl(context):
+        pass
 
-  @when('we implement a test')
-  def step_impl(context):
-      assert True is not False
+    @when('we implement a test')
+    def step_impl(context):
+        assert True is not False
 
-  @then('behave will test it for us!')
-  def step_impl(context):
-      assert context.failed is False
+    @then('behave will test it for us!')
+    def step_impl(context):
+        assert context.failed is False
 
 Run behave::
 
@@ -219,15 +219,16 @@ function. The table for the example above could be accessed like so:
 
 .. code-block:: python
 
-  @given('a set of specific users')
-  def step_impl(context):
-      for row in context.table:
-          model.add_user(name=row['name'], department=row['department'])
+    @given('a set of specific users')
+    def step_impl(context):
+        for row in context.table:
+            model.add_user(name=row['name'], department=row['department'])
 
 There's a variety of ways to access the table data - see the
 :class:`~behave.model.Table` API documentation for the full details.
 
 
+.. _docid.tutorial.python-step-implementations:
 
 Python Step Implementations
 ===========================
@@ -258,25 +259,33 @@ Step code implementing the two steps here might look like
 
 .. code-block:: python
 
- @given('I search for a valid account')
- def step_impl(context):
-    context.browser.get('http://localhost:8000/index')
-    form = get_element(context.browser, tag='form')
-    get_element(form, name="msisdn").send_keys('61415551234')
-    form.submit()
+    @given('I search for a valid account')
+    def step_impl(context):
+        context.browser.get('http://localhost:8000/index')
+        form = get_element(context.browser, tag='form')
+        get_element(form, name="msisdn").send_keys('61415551234')
+        form.submit()
 
- @then('I will see the account details')
- def step_impl(context):
-    elements = find_elements(context.browser, id='no-account')
-    eq_(elements, [], 'account not found')
-    h = get_element(context.browser, id='account-head')
-    ok_(h.text.startswith("Account 61415551234"),
-        'Heading %r has wrong text' % h.text)
+    @then('I will see the account details')
+    def step_impl(context):
+        elements = find_elements(context.browser, id='no-account')
+        eq_(elements, [], 'account not found')
+        h = get_element(context.browser, id='account-head')
+        ok_(h.text.startswith("Account 61415551234"),
+            'Heading %r has wrong text' % h.text)
 
 The ``step`` decorator matches the step to *any* step type, "given", "when"
 or "then". The "and" and "but" step types are renamed internally to take
 the preceding step's keyword (so an "and" following a "given" will become a
 "given" internally and use a **given** decorated step).
+
+.. note::
+
+  Step function names do not need to have a unique symbol name, because the
+  text matching selects the step function from the step registry before it is
+  called as anonymous function.  Hence, when *behave* prints out the missing
+  step implementations in a test run, it uses "step_impl" for all functions
+  by default.
 
 If you find you'd like your step implementation to invoke another step you
 may do so with the :class:`~behave.runner.Context` method
@@ -296,6 +305,8 @@ This function allows you to, for example:
 This will cause the "when I do the same thing as before" step to execute
 the other two steps as though they had also appeared in the scenario file.
 
+
+.. _docid.tutorial.step-parameters:
 
 Step Parameters
 ---------------
@@ -319,10 +330,10 @@ clauses (with a Given step that puts some text into
 
 .. code-block:: python
 
- @then('the result page will include "{text}"')
- def step_impl(context, text):
-    if text not in context.response:
-        fail('%r not in %r' % (text, context.response))
+    @then('the result page will include "{text}"')
+    def step_impl(context, text):
+        if text not in context.response:
+            fail('%r not in %r' % (text, context.response))
 
 There are several parsers available in *behave* (by default):
 
@@ -343,9 +354,9 @@ There are several parsers available in *behave* (by default):
     as long as a type converter for cardinality=1 is provided.
     Supports parse expressions like:
 
-        * ``{values:Type+}`` (cardinality=1..N, many)
-        * ``{values:Type*}`` (cardinality=0..N, many0)
-        * ``{value:Type?}``  (cardinality=0..1, optional).
+    * ``{values:Type+}`` (cardinality=1..N, many)
+    * ``{values:Type*}`` (cardinality=0..N, many0)
+    * ``{value:Type?}``  (cardinality=0..1, optional).
 
     Supports type conversions (as above).
 
@@ -391,15 +402,15 @@ steps you define you might have:
 
 .. code-block:: python
 
-  @given('I request a new widget for an account via SOAP')
-  def step_impl(context):
-      client = Client("http://127.0.0.1:8000/soap/")
-      context.response = client.Allocate(customer_first='Firstname',
-          customer_last='Lastname', colour='red')
+    @given('I request a new widget for an account via SOAP')
+    def step_impl(context):
+        client = Client("http://127.0.0.1:8000/soap/")
+        context.response = client.Allocate(customer_first='Firstname',
+            customer_last='Lastname', colour='red')
 
-  @then('I should receive an OK SOAP response')
-  def step_impl(context):
-      eq_(context.response['ok'], 1)
+    @then('I should receive an OK SOAP response')
+    def step_impl(context):
+        eq_(context.response['ok'], 1)
 
 There's also some values added to the context by *behave* itself:
 
@@ -419,6 +430,8 @@ There's also some values added to the context by *behave* itself:
 The *context* variable in all cases is an instance of
 :class:`behave.runner.Context`.
 
+
+.. _docid.tutorial.environmental-controls:
 
 Environmental Controls
 ======================
@@ -457,30 +470,53 @@ server and browser to run all your tests in. For example:
 
 .. code-block:: python
 
-  import threading
-  from wsgiref import simple_server
-  from selenium import webdriver
-  from my_application import model
-  from my_application import web_app
+    # -- FILE: features/environment.py
+    from behave import fixture, use_fixture
+    from behave4my_project.fixtures import wsgi_server
+    from selenium import webdriver
 
-  def before_all(context):
-      context.server = simple_server.WSGIServer(('', 8000))
-      context.server.set_app(web_app.main(environment='test'))
-      context.thread = threading.Thread(target=context.server.serve_forever)
-      context.thread.start()
-      context.browser = webdriver.Chrome()
+    @fixture
+    def selenium_browser_chrome(context):
+        # -- HINT: @behave.fixture is similar to @contextlib.contextmanager
+        context.browser = webdriver.Chrome()
+        yield context.browser
+        # -- CLEANUP-FIXTURE PART:
+        context.browser.quit()
 
-  def after_all(context):
-      context.server.shutdown()
-      context.thread.join()
-      context.browser.quit()
+    def before_all(context):
+        use_fixture(wsgi_server, context, port=8000)
+        use_fixture(selenium_browser_chrome, context)
+        # -- HINT: CLEANUP-FIXTURE is performed after after_all() hook is called.
 
-  def before_feature(context, feature):
-      model.init(environment='test')
+    def before_feature(context, feature):
+        model.init(environment='test')
 
-Of course if you wish you could have a new browser for each feature, or to
+
+.. code-block:: python
+
+    # -- FILE: behave4my_project/fixtures.py
+    # ALTERNATIVE: Place fixture in "features/environment.py" (but reuse is harder)
+    from behave import fixture
+    import threading
+    from wsgiref import simple_server
+    from my_application import model
+    from my_application import web_app
+
+    @fixture
+    def wsgi_server(context, port=8000):
+        context.server = simple_server.WSGIServer(('', port))
+        context.server.set_app(web_app.main(environment='test'))
+        context.thread = threading.Thread(target=context.server.serve_forever)
+        context.thread.start()
+        yield context.server
+        # -- CLEANUP-FIXTURE PART:
+        context.server.shutdown()
+        context.thread.join()
+
+
+Of course, if you wish, you could have a new browser for each feature, or to
 retain the database state between features or even initialise the database
-for to each scenario.
+for each scenario.
 
 
 .. _`controlling things with tags`:
@@ -514,17 +550,17 @@ Given a feature file with:
 
 then running ``behave --tags=slow`` will run just the scenarios tagged
 ``@slow``. If you wish to check everything *except* the slow ones then you
-may run ``behave --tags=-slow``.
+may run ``behave --tags="not @slow"``.
 
 Another common use-case is to tag a scenario you're working on with
 ``@wip`` and then ``behave --tags=wip`` to just test that one case.
 
 Tag selection on the command-line may be combined:
 
-* ``--tags=wip,slow``
+* ``--tags="@wip or @slow"``
    This will select all the cases tagged *either* "wip" or "slow".
 
-* ``--tags=wip --tags=slow``
+* ``--tags="@wip and @slow"``
    This will select all the cases tagged *both* "wip" and "slow".
 
 If a feature or scenario is tagged and then skipped because of a
@@ -545,24 +581,19 @@ the functions will be called multiple times with each tag in the order
 they're defined in the feature file.
 
 Re-visiting the example from above; if only some of the features required a
-browser and web server then you could tag them ``@browser``:
+browser and web server then you could tag them ``@fixture.browser``:
 
 .. code-block:: python
 
-  def before_feature(context, feature):
-      model.init(environment='test')
-      if 'browser' in feature.tags:
-          context.server = simple_server.WSGIServer(('', 8000))
-          context.server.set_app(web_app.main(environment='test'))
-          context.thread = threading.Thread(target=context.server.serve_forever)
-          context.thread.start()
-          context.browser = webdriver.Chrome()
+    # -- FILE: features/environment.py
+    # HINT: Reusing some code parts from above.
+    ...
 
-  def after_feature(context, feature):
-      if 'browser' in feature.tags:
-          context.server.shutdown()
-          context.thread.join()
-          context.browser.quit()
+    def before_feature(context, feature):
+        model.init(environment='test')
+        if "fixture.browser" in feature.tags:
+            use_fixture(wsgi_server, context)
+            use_fixture(selenium_browser_chrome, context)
 
 
 Works In Progress
@@ -589,6 +620,29 @@ command-line flag. This flag:
    scenario's output
 4. only runs scenarios tagged with "@wip"
 5. stops at the first error
+
+
+Fixtures
+===================================
+
+Fixtures simplify the setup/cleanup tasks that are often needed during test execution.
+
+.. code-block:: python
+
+    # -- FILE: behave4my_project/fixtures.py  (or in: features/environment.py)
+    from behave import fixture
+    from somewhere.browser.firefox import FirefoxBrowser
+
+    # -- FIXTURE: Use generator-function
+    @fixture
+    def browser_firefox(context, timeout=30, **kwargs):
+        # -- SETUP-FIXTURE PART:
+        context.browser = FirefoxBrowser(timeout, **kwargs)
+        yield context.browser
+        # -- CLEANUP-FIXTURE PART:
+        context.browser.shutdown()
+
+See :ref:`docid.fixtures` for more information.
 
 
 .. index::
@@ -632,5 +686,3 @@ by using the user-specific configuration data. A user can:
             # NOTE: Use IPython debugger, same for pdb (basic python debugger).
             import ipdb
             ipdb.post_mortem(step.exc_traceback)
-
-

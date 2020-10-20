@@ -95,9 +95,9 @@ You may see the same information presented below at any time using ``behave
 
 .. option:: -n, --name
 
-    Only execute the feature elements which match part of the given name.
-    If this option is given more than once, it will match against all
-    the given names.
+    Select feature elements (scenarios, ...) to run which match part of
+    the given name (regex pattern). If this option is given more than
+    once, it will match against all the given names.
 
 .. option:: --no-capture
 
@@ -250,40 +250,41 @@ You may see the same information presented below at any time using ``behave
 Tag Expression
 --------------
 
-Scenarios inherit tags declared on the Feature level. The simplest
-TAG_EXPRESSION is simply a tag::
+Scenarios inherit tags that are declared on the Feature level.
+The simplest TAG_EXPRESSION is simply a tag::
 
-    --tags @dev
+    --tags=@dev
 
 You may even leave off the "@" - behave doesn't mind.
 
-When a tag in a tag expression starts with a ~, this represents boolean NOT::
+You can also exclude all features / scenarios that have a tag,
+by using boolean NOT::
 
-    --tags ~@dev
+    --tags="not @dev"
 
-A tag expression can have several tags separated by a comma, which represents
-logical OR::
+A tag expression can also use a logical OR::
 
-    --tags @dev,@wip
+    --tags="@dev or @wip"
 
-The --tags option can be specified several times, and this represents logical
-AND, for instance this represents the boolean expression
-"(@foo or not @bar) and @zap"::
+The --tags option can be specified several times,
+and this represents logical AND,
+for instance this represents the boolean expression::
 
-    --tags @foo,~@bar --tags @zap.
+    --tags="(@foo or not @bar) and @zap"
 
-Beware that if you want to use several negative tags to exclude several tags
-you have to use logical AND::
+You can also exclude several tags::
 
-    --tags ~@fixme --tags ~@buggy.
+    --tags="not (@fixme or @buggy)"
 
+
+.. _docid.behave.configuration-files:
 
 Configuration Files
 ===================
 
 Configuration files for *behave* are called either ".behaverc",
-"behave.ini" or "setup.cfg" (your preference) and are located in one of
-three places:
+"behave.ini", "setup.cfg" or "tox.ini" (your preference) and are located in
+one of three places:
 
 1. the current working directory (good for per-project settings),
 2. your home directory ($HOME), or
@@ -323,12 +324,11 @@ The following types are supported (and used):
 
     .. code-block:: ini
 
-        tags=@foo,~@bar
-            @zap
+        default_tags= (@foo or not @bar) and @zap
 
     which is the equivalent of the command-line usage::
 
-        --tags @foo,~@bar --tags @zap
+        --tags="(@foo or not @bar) and @zap"
 
 
 
@@ -449,9 +449,9 @@ Configuration Parameters
 
 .. describe:: name : sequence<text>
 
-    Only execute the feature elements which match part of the given name.
-    If this option is given more than once, it will match against all
-    the given names.
+    Select feature elements (scenarios, ...) to run which match part of
+    the given name (regex pattern). If this option is given more than
+    once, it will match against all the given names.
 
 .. index::
     single: configuration param; stdout_capture
@@ -583,7 +583,7 @@ Configuration Parameters
 .. index::
     single: configuration param; default_tags
 
-.. describe:: default_tags : text
+.. describe:: default_tags : sequence<text>
 
     Define default tags when non are provided. See --tags for more
     information.

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Knowledge base of all built-on formatters.
+Knowledge base of all built-in formatters.
 """
 
 from __future__ import  absolute_import
@@ -12,6 +12,7 @@ from behave.formatter import _registry
 # -----------------------------------------------------------------------------
 # SCHEMA: formatter.name, formatter.class(_name)
 _BUILTIN_FORMATS = [
+    # pylint: disable=bad-whitespace
     ("plain",   "behave.formatter.plain:PlainFormatter"),
     ("pretty",  "behave.formatter.pretty:PrettyFormatter"),
     ("json",    "behave.formatter.json:JSONFormatter"),

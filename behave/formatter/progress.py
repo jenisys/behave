@@ -10,10 +10,10 @@ executing a scope item.
 """
 
 from __future__ import absolute_import
-from behave.formatter.base import Formatter
-import os
-import os.path
 import six
+from behave.formatter.base import Formatter
+from behave.model_core import Status
+from behave.textutil import text as _text
 
 
 # -----------------------------------------------------------------------------
@@ -42,22 +42,27 @@ class ProgressFormatterBase(Formatter):
         self.stream = self.open()
         self.steps = []
         self.failures = []
-        self.current_feature  = None
+        self.current_feature = None
+        self.current_rule = None
         self.current_scenario = None
         self.show_timings = config.show_timings and self.show_timings
 
     def reset(self):
         self.steps = []
         self.failures = []
-        self.current_feature  = None
+        self.current_feature = None
+        self.current_rule = None
         self.current_scenario = None
 
     # -- FORMATTER API:
     def feature(self, feature):
+        self.current_rule = None
         self.current_feature = feature
-        short_filename = os.path.relpath(feature.filename, os.getcwd())
-        self.stream.write("%s  " % six.text_type(short_filename))
+        self.stream.write("%s  " % six.text_type(feature.filename))
         self.stream.flush()
+
+    def rule(self, rule):
+        self.current_rule = rule
 
     def background(self, background):
         pass
@@ -70,15 +75,12 @@ class ProgressFormatterBase(Formatter):
         self.report_scenario_completed()
         self.current_scenario = scenario
 
-    def scenario_outline(self, outline):
-        self.current_scenario = outline
-
     def step(self, step):
         self.steps.append(step)
 
-    def result(self, result):
+    def result(self, step):
         self.steps.pop(0)
-        self.report_step_progress(result)
+        self.report_step_progress(step)
 
     def eof(self):
         """
@@ -92,17 +94,15 @@ class ProgressFormatterBase(Formatter):
         self.reset()
 
     # -- SPECIFIC PART:
-    def report_step_progress(self, result):
-        """
-        Report the progress on the current step.
+    def report_step_progress(self, step):
+        """Report the progress on the current step.
         The default implementation is empty.
         It should be override by a concrete class.
         """
         pass
 
     def report_scenario_progress(self):
-        """
-        Report the progress for the current/last scenario.
+        """Report the progress for the current/last scenario.
         The default implementation is empty.
         It should be override by a concrete class.
         """
@@ -132,13 +132,13 @@ class ProgressFormatterBase(Formatter):
         if self.failures:
             separator = "-" * 80
             self.stream.write(u"%s\n" % separator)
-            for result in self.failures:
-                self.stream.write(u"FAILURE in step '%s':\n" % result.name)
-                self.stream.write(u"  Feature:  %s\n" % result.feature.name)
-                self.stream.write(u"  Scenario: %s\n" % result.scenario.name)
-                self.stream.write(u"%s\n" % result.error_message)
-                if result.exception:
-                    self.stream.write(u"exception: %s\n" % result.exception)
+            for step in self.failures:
+                self.stream.write(u"FAILURE in step '%s':\n" % step.name)
+                self.stream.write(u"  Feature:  %s\n" % step.feature.name)
+                self.stream.write(u"  Scenario: %s\n" % step.scenario.name)
+                self.stream.write(u"%s\n" % step.error_message)
+                if step.exception:
+                    self.stream.write(u"exception: %s\n" % step.exception)
             self.stream.write(u"%s\n" % separator)
 
 
@@ -159,9 +159,9 @@ class ScenarioProgressFormatter(ProgressFormatterBase):
         if not self.current_scenario:
             return  # SKIP: No results to report for first scenario.
         # -- NORMAL-CASE:
-        status = self.current_scenario.status
-        dot_status = self.dot_status[status]
-        if status == "failed":
+        status_name = self.current_scenario.status.name
+        dot_status = self.dot_status[status_name]
+        if status_name == "failed":
             # MAYBE TODO: self.failures.append(result)
             pass
         self.stream.write(dot_status)
@@ -180,19 +180,17 @@ class StepProgressFormatter(ProgressFormatterBase):
     name = "progress2"
     description = "Shows dotted progress for each executed step."
 
-    def report_step_progress(self, result):
-        """
-        Report the progress for each step.
-        """
-        dot_status = self.dot_status[result.status]
-        if result.status == "failed":
-            if (result.exception and
-                not isinstance(result.exception, AssertionError)):
+    def report_step_progress(self, step):
+        """Report the progress for each step."""
+        dot_status = self.dot_status[step.status.name]
+        if step.status == Status.failed:
+            if (step.exception and
+                    not isinstance(step.exception, AssertionError)):
                 # -- ISA-ERROR: Some Exception
                 dot_status = self.dot_status["error"]
-            result.feature  = self.current_feature
-            result.scenario = self.current_scenario
-            self.failures.append(result)
+            step.feature = self.current_feature
+            step.scenario = self.current_scenario
+            self.failures.append(step)
         self.stream.write(dot_status)
         self.stream.flush()
 
@@ -227,9 +225,15 @@ class ScenarioStepProgressFormatter(StepProgressFormatter):
 
     # -- FORMATTER API:
     def feature(self, feature):
+        self.current_rule = None
         self.current_feature = feature
-        short_filename = os.path.relpath(feature.filename, os.getcwd())
-        self.stream.write(u"%s    # %s" % (feature.name, short_filename))
+        self.stream.write(u"%s    # %s" % (feature.name, feature.filename))
+
+    def rule(self, rule):
+        self.current_rule = rule
+        self.stream.write(u"\n\n  %s: %s    # %s" %
+                          (rule.keyword, rule.name, rule.location))
+        self.stream.flush()
 
     def scenario(self, scenario):
         """Process the next scenario."""
@@ -240,9 +244,12 @@ class ScenarioStepProgressFormatter(StepProgressFormatter):
         assert not self.failures
         self.current_scenario = scenario
         scenario_name = scenario.name
+        prefix = self.scenario_prefix
+        if self.current_rule:
+            prefix += u"  "
         if scenario_name:
             scenario_name += " "
-        self.stream.write(u"%s%s " % (self.scenario_prefix, scenario_name))
+        self.stream.write(u"%s%s " % (prefix, scenario_name))
         self.stream.flush()
 
     # -- DISABLED:
@@ -272,9 +279,21 @@ class ScenarioStepProgressFormatter(StepProgressFormatter):
         if self.failures:
             separator = "-" * 80
             self.stream.write(u"%s\n" % separator)
-            for failure in self.failures:
-                self.stream.write(u"FAILURE in step '%s' (%s):\n" % \
-                                  (failure.name, failure.location))
-                self.stream.write(u"%s\n" % failure.error_message)
-                self.stream.write(u"%s\n" % separator)
+            unicode_errors = 0
+            for step in self.failures:
+                try:
+                    self.stream.write(u"FAILURE in step '%s' (%s):\n" % \
+                                      (step.name, step.location))
+                    self.stream.write(u"%s\n" % step.error_message)
+                    self.stream.write(u"%s\n" % separator)
+                except UnicodeError as e:
+                    self.stream.write(u"%s while reporting failure in %s\n" % \
+                                      (e.__class__.__name__, step.location))
+                    self.stream.write(u"ERROR: %s\n" % \
+                                      _text(e, encoding=self.stream.encoding))
+                    unicode_errors += 1
+
+            if unicode_errors:
+                msg = u"HINT: %d unicode errors occured during failure reporting.\n"
+                self.stream.write(msg % unicode_errors)
             self.stream.flush()

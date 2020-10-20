@@ -10,8 +10,8 @@ development (TDD), including acceptance test or customer test driven
 development practices as found in extreme programming. It has `evolved over
 the last few years`__.
 
-__ http://dannorth.net/introducing-bdd
-__ https://forums.pragprog.com/forums/95/topics/3035
+__ https://dannorth.net/introducing-bdd
+__ https://dannorth.net/2006/06/04/theres-more-to-bdd-than-evolving-tdd/
 
 On the "Agile specifications, BDD and Testing eXchange" in November 2009 in
 London, Dan North `gave the following definition of BDD`__:
@@ -67,7 +67,7 @@ which accrues once the application is in production. The only way in which
 this benefit can be realized is through the user interface(s) to the
 application, usually (but not always) a GUI.
 
-__ http://lizkeogh.com/2007/06/13/bdd-tdd-done-well/
+__ https://lizkeogh.com/2007/06/13/bdd-tdd-done-well/
 
 In the same way, each piece of code, starting with the UI, can be
 considered a stakeholder of the other modules of code which it uses. Each
@@ -90,7 +90,7 @@ The requirements of a retail application might be, "Refunded or exchanged
 items should be returned to stock." In BDD, a developer or QA engineer
 might clarify the requirements by breaking this down into specific
 examples. The language of the examples below is called Gherkin and is used
-*behave* as well as many other tools.
+by *behave* as well as many other tools.
 
 .. code-block:: gherkin
 
@@ -108,7 +108,7 @@ examples. The language of the examples below is called Gherkin and is used
     then I should have three blue garments in stock
      and two black garments in stock.
 
-Each scenario is an exemplar, designed to illustrate a specific aspect of behavior of the application.
+Each scenario is an example, designed to illustrate a specific aspect of behavior of the application.
 
 When discussing the scenarios, participants question whether the outcomes
 described always result from those events occurring in the given context.
@@ -117,14 +117,14 @@ requirements`__. For instance, a domain expert noticing that refunded items
 are not always returned to stock might reword the requirements as "Refunded
 or replaced items should be returned to stock, unless faulty.".
 
-__ http://dannorth.net/whats-in-a-story
+__ https://dannorth.net/whats-in-a-story
 
 This in turn helps participants to pin down the scope of requirements,
 which leads to better estimates of how long those requirements will take to
 implement.
 
-The words Given, When and Then are often used to help drive out the
-scenarios, but are not mandated.
+The words "Given", "When" and "Then" are often used to help drive out the
+scenarios, but are not mandatory.
 
 These scenarios can also be automated, if an appropriate tool exists to
 allow automation at the UI level. If no such tool exists then it may be
@@ -138,7 +138,7 @@ Programmer-domain examples and behavior
 The same principles of examples, using contexts, events and outcomes are
 used to drive development at the level of abstraction of the programmer, as
 opposed to the business level. For instance, the following examples
-describe an aspect of behavior of a list:
+describe different aspects of the list's behavior:
 
 .. code-block:: gherkin
 
@@ -231,5 +231,5 @@ This text is partially taken from the wikipedia text on `Behavior Driven
 Development`_ with modifications where appropriate to be more specific to
 *behave* and Python.
 
-.. _`Behavior Driven Development`: http://en.wikipedia.org/wiki/Behavior_Driven_Development
+.. _`Behavior Driven Development`: https://en.wikipedia.org/wiki/Behavior_Driven_Development
 

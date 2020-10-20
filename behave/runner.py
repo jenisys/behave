@@ -2,35 +2,58 @@
 """
 This module provides Runner class to run behave feature files (or model elements).
 """
+
 from __future__ import absolute_import, print_function, with_statement
+
 import contextlib
 import os.path
 import sys
-import traceback
 import warnings
 import weakref
-import six
-from six import StringIO
 
-from behave import matchers
-from behave.step_registry import setup_step_decorators, registry as the_step_registry
-from behave.formatter._registry import make_formatters
-from behave.configuration import ConfigError
-from behave.log_capture import LoggingCapture
-from behave.runner_util import collect_feature_locations, parse_features
+import six
+
 from behave._types import ExceptionUtil
+from behave.capture import CaptureController
+from behave.exception import ConfigError
+from behave.formatter._registry import make_formatters
+from behave.runner_util import \
+    collect_feature_locations, parse_features, \
+    exec_file, load_step_modules, PathManager
+from behave.step_registry import registry as the_step_registry
+from enum import Enum
+
+if six.PY2:
+    # -- USE PYTHON3 BACKPORT: With unicode traceback support.
+    import traceback2 as traceback
+else:
+    import traceback
+
+
+class CleanupError(RuntimeError):
+    pass
 
 
 class ContextMaskWarning(UserWarning):
     """Raised if a context variable is being overwritten in some situations.
 
     If the variable was originally set by user code then this will be raised if
-    *behave* overwites the value.
+    *behave* overwrites the value.
 
     If the variable was originally set by *behave* then this will be raised if
-    user code overwites the value.
+    user code overwrites the value.
     """
     pass
+
+
+class ContextMode(Enum):
+    """Used to distinguish between the two usage modes while using the context:
+
+    * BEHAVE: Indicates "behave" (internal) mode
+    * USER: Indicates "user" mode (in steps, hooks, fixtures, ...)
+    """
+    BEHAVE = 1
+    USER = 2
 
 
 class Context(object):
@@ -91,7 +114,7 @@ class Context(object):
 
       The configuration of *behave* as determined by configuration files and
       command-line options. The attributes of this object are the same as the
-      `configuration file settion names`_.
+      `configuration file section names`_.
 
     .. attribute:: active_outline
 
@@ -117,12 +140,12 @@ class Context(object):
       output as a StringIO instance. It is not present if stderr is not being
       captured.
 
-    If an attempt made by user code to overwrite one of these variables, or
-    indeed by *behave* to overwite a user-set variable, then a
-    :class:`behave.runner.ContextMaskWarning` warning will be raised.
+    A :class:`behave.runner.ContextMaskWarning` warning will be raised if user
+    code attempts to overwrite one of these variables, or if *behave* itself
+    tries to overwrite a user-set variable.
 
     You may use the "in" operator to test whether a certain value has been set
-    on the context, for example:
+    on the context, for example::
 
         "feature" in context
 
@@ -132,11 +155,11 @@ class Context(object):
     they are set. You can't delete a value set by a feature at a scenario level
     but you can delete a value set for a scenario in that scenario.
 
-    .. _`configuration file settion names`: behave.html#configuration-files
+    .. _`configuration file section names`: behave.html#configuration-files
     """
     # pylint: disable=too-many-instance-attributes
-    BEHAVE = "behave"
-    USER = "user"
+    LAYER_NAMES = ["testrun", "feature", "rule", "scenario"]
+    FAIL_ON_CLEANUP_ERRORS = True
 
     def __init__(self, runner):
         self._runner = weakref.proxy(runner)
@@ -146,33 +169,111 @@ class Context(object):
             "failed": False,
             "config": self._config,
             "active_outline": None,
+            "cleanup_errors": 0,
+            "@cleanups": [],    # -- REQUIRED-BY: before_all() hook
+            "@layer": "testrun",
         }
         self._stack = [d]
         self._record = {}
         self._origin = {}
-        self._mode = self.BEHAVE
+        self._mode = ContextMode.BEHAVE
+
+        # -- MODEL ENTITY REFERENCES/SUPPORT:
         self.feature = None
-        # -- RECHECK: If needed
+        # DISABLED: self.rule = None
+        # DISABLED: self.scenario = None
         self.text = None
         self.table = None
+
+        # -- RUNTIME SUPPORT:
         self.stdout_capture = None
         self.stderr_capture = None
         self.log_capture = None
+        self.fail_on_cleanup_errors = self.FAIL_ON_CLEANUP_ERRORS
 
-    def _push(self):
-        self._stack.insert(0, {})
+    @staticmethod
+    def ignore_cleanup_error(context, cleanup_func, exception):
+        pass
+
+    @staticmethod
+    def print_cleanup_error(context, cleanup_func, exception):
+        cleanup_func_name = getattr(cleanup_func, "__name__", None)
+        if not cleanup_func_name:
+            cleanup_func_name = "%r" % cleanup_func
+        print(u"CLEANUP-ERROR in %s: %s: %s" %
+              (cleanup_func_name, exception.__class__.__name__, exception))
+        traceback.print_exc(file=sys.stdout)
+        # MAYBE: context._dump(pretty=True, prefix="Context: ")
+        # -- MARK: testrun as FAILED
+        # context._set_root_attribute("failed", True)
+
+    def _do_cleanups(self):
+        """Execute optional cleanup functions when stack frame is popped.
+        A user can add a user-specified handler for cleanup errors.
+
+        .. code-block:: python
+
+            # -- FILE: features/environment.py
+            def cleanup_database(database):
+                pass
+
+            def handle_cleanup_error(context, cleanup_func, exception):
+                pass
+
+            def before_all(context):
+                context.on_cleanup_error = handle_cleanup_error
+                context.add_cleanup(cleanup_database, the_database)
+        """
+        # -- BEST-EFFORT ALGORITHM: Tries to perform all cleanups.
+        assert self._stack, "REQUIRE: Non-empty stack"
+        current_layer = self._stack[0]
+        cleanup_funcs = current_layer.get("@cleanups", [])
+        on_cleanup_error = getattr(self, "on_cleanup_error",
+                                   self.print_cleanup_error)
+        context = self
+        cleanup_errors = []
+        for cleanup_func in reversed(cleanup_funcs):
+            try:
+                cleanup_func()
+            except Exception as e: # pylint: disable=broad-except
+                # pylint: disable=protected-access
+                context._root["cleanup_errors"] += 1
+                cleanup_errors.append(sys.exc_info())
+                on_cleanup_error(context, cleanup_func, e)
+
+        if self.fail_on_cleanup_errors and cleanup_errors:
+            first_cleanup_erro_info = cleanup_errors[0]
+            del cleanup_errors  # -- ENSURE: Release other exception frames.
+            six.reraise(*first_cleanup_erro_info)
+
+    def _push(self, layer=None):
+        """Push a new layer on the context stack.
+        HINT: Use layer values: "testrun", "feature", "rule, "scenario".
+
+        :param layer:   Layer name to use (or None).
+        """
+        initial_data = {"@cleanups": []}
+        if layer:
+            initial_data["@layer"] = layer
+        self._stack.insert(0, initial_data)
 
     def _pop(self):
-        self._stack.pop(0)
-
+        """Pop the current layer from the context stack.
+        Performs any pending cleanups, registered for this layer.
+        """
+        try:
+            self._do_cleanups()
+        finally:
+            # -- ENSURE: Layer is removed even if cleanup-errors occur.
+            self._stack.pop(0)
 
     def _use_with_behave_mode(self):
         """Provides a context manager for using the context in BEHAVE mode."""
-        return use_context_with_mode(self, Context.BEHAVE)
+        return use_context_with_mode(self, ContextMode.BEHAVE)
 
     def use_with_user_mode(self):
         """Provides a context manager for using the context in USER mode."""
-        return use_context_with_mode(self, Context.USER)
+        return use_context_with_mode(self, ContextMode.USER)
 
     def user_mode(self):
         warnings.warn("Use 'use_with_user_mode()' instead",
@@ -199,11 +300,11 @@ class Context(object):
 
     def _emit_warning(self, attr, params):
         msg = ""
-        if self._mode is self.BEHAVE and self._origin[attr] is not self.BEHAVE:
+        if self._mode is ContextMode.BEHAVE and self._origin[attr] is not ContextMode.BEHAVE:
             msg = "behave runner is masking context attribute '%(attr)s' " \
                   "originally set in %(function)s (%(filename)s:%(line)s)"
-        elif self._mode is self.USER:
-            if self._origin[attr] is not self.USER:
+        elif self._mode is ContextMode.USER:
+            if self._origin[attr] is not ContextMode.USER:
                 msg = "user code is masking context attribute '%(attr)s' " \
                       "originally set by behave"
             elif self._config.verbose:
@@ -225,7 +326,11 @@ class Context(object):
 
     def __getattr__(self, attr):
         if attr[0] == "_":
-            return self.__dict__[attr]
+            try:
+                return self.__dict__[attr]
+            except KeyError:
+                raise AttributeError(attr)
+
         for frame in self._stack:
             if attr in frame:
                 return frame[attr]
@@ -249,7 +354,10 @@ class Context(object):
                 }
                 self._emit_warning(attr, params)
 
-        stack_frame = traceback.extract_stack(limit=2)[0]
+        stack_limit = 2
+        if six.PY2:
+            stack_limit += 1     # Due to traceback2 usage.
+        stack_frame = traceback.extract_stack(limit=stack_limit)[0]
         self._record[attr] = stack_frame
         frame = self._stack[0]
         frame[attr] = value
@@ -279,11 +387,13 @@ class Context(object):
         executed in turn just as though they were defined in a feature file.
 
         If the execute_steps call fails (either through error or failure
-        assertion) then the step invoking it will fail.
+        assertion) then the step invoking it will need to catch the resulting
+        exceptions.
 
-        ValueError will be raised if this is invoked outside a feature context.
-
-        Returns boolean False if the steps are not parseable, True otherwise.
+        :param steps_text:  Text with the Gherkin steps to execute (as string).
+        :returns: True, if the steps executed successfully.
+        :raises: AssertionError, if a step failure occurs.
+        :raises: ValueError, if invoked without a feature context.
         """
         assert isinstance(steps_text, six.text_type), "Steps must be unicode."
         if not self.feature:
@@ -302,9 +412,13 @@ class Context(object):
                 if not passed:
                     # -- ISSUE #96: Provide more substep info to diagnose problem.
                     step_line = u"%s %s" % (step.keyword, step.name)
-                    message = "%s SUB-STEP: %s" % (step.status.upper(), step_line)
+                    message = "%s SUB-STEP: %s" % \
+                              (step.status.name.upper(), step_line)
                     if step.error_message:
-                        message += "\nSubstep info: %s" % step.error_message
+                        message += "\nSubstep info: %s\n" % step.error_message
+                        message += u"Traceback (of failed substep):\n"
+                        message += u"".join(traceback.format_tb(step.exc_traceback))
+                    # message += u"\nTraceback (of context.execute_steps()):"
                     assert False, message
 
             # -- FINALLY: Restore original context data for current step.
@@ -312,16 +426,65 @@ class Context(object):
             self.text = original_text
         return True
 
+    def _select_stack_frame_by_layer(self, layer):
+        """Select context stack frame by layer name.
+
+        :param layer:   Layer name (as string).
+        :return: Selected frame object (if any)
+        :raises: LookupError, if layer was not found.
+        """
+        for frame in self._stack:
+            frame_layer = frame.get("@layer", None)
+            if layer == frame_layer:
+                return frame
+        # -- OOPS, NOT FOUND:
+        raise LookupError("Context.stack: layer=%s not found" % layer)
+
+    def add_cleanup(self, cleanup_func, *args, **kwargs):
+        """Adds a cleanup function that is called when :meth:`Context._pop()`
+        is called. This is intended for user-cleanups.
+
+        :param cleanup_func:    Callable function
+        :param args:            Args for cleanup_func() call (optional).
+        :param kwargs:          Kwargs for cleanup_func() call (optional).
+
+        .. note:: RESERVED :obj:`layer` : optional-string
+
+            The keyword argument ``layer="LAYER_NAME"`` can to be used to
+            assign the :obj:`cleanup_func` to specific a layer on the context stack
+            (instead of the current layer).
+
+            Known layer names are: "testrun", "feature", "rule", "scenario"
+
+        .. seealso:: :attr:`.Context.LAYER_NAMES`
+        """
+        # MAYBE:
+        assert callable(cleanup_func), "REQUIRES: callable(cleanup_func)"
+        assert self._stack
+        layer = kwargs.pop("layer", None)
+        if args or kwargs:
+            def internal_cleanup_func():
+                cleanup_func(*args, **kwargs)
+        else:
+            internal_cleanup_func = cleanup_func
+
+        current_frame = self._stack[0]
+        if layer:
+            current_frame = self._select_stack_frame_by_layer(layer)
+        if cleanup_func not in current_frame["@cleanups"]:
+            # -- AVOID DUPLICATES:
+            current_frame["@cleanups"].append(internal_cleanup_func)
+
 
 @contextlib.contextmanager
 def use_context_with_mode(context, mode):
-    """Switch context to BEHAVE or USER mode.
+    """Switch context to ContextMode.BEHAVE or ContextMode.USER mode.
     Provides a context manager for switching between the two context modes.
 
     .. sourcecode:: python
 
         context = Context()
-        with use_context_with_mode(context, Context.BEHAVE):
+        with use_context_with_mode(context, ContextMode.BEHAVE):
             ...     # Do something
         # -- POSTCONDITION: Original context._mode is restored.
 
@@ -329,7 +492,7 @@ def use_context_with_mode(context, mode):
     :param mode:     Mode to apply to context object.
     """
     # pylint: disable=protected-access
-    assert mode in (Context.BEHAVE, Context.USER)
+    assert mode in (ContextMode.BEHAVE, ContextMode.USER)
     current_mode = context._mode
     try:
         context._mode = mode
@@ -340,18 +503,21 @@ def use_context_with_mode(context, mode):
         context._mode = current_mode
 
 
+@contextlib.contextmanager
+def scoped_context_layer(context, layer=None):
+    """Provides context manager for context layer (push/do-something/pop cycle).
 
-def exec_file(filename, globals_=None, locals_=None):
-    if globals_ is None:
-        globals_ = {}
-    if locals_ is None:
-        locals_ = globals_
-    locals_["__file__"] = filename
-    with open(filename, "rb") as f:
-        # pylint: disable=exec-used
-        filename2 = os.path.relpath(filename, os.getcwd())
-        code = compile(f.read(), filename2, "exec", dont_inherit=True)
-        exec(code, globals_, locals_)
+    .. code-block::
+
+        with scoped_context_layer(context):
+            the_fixture = use_fixture(foo, context, name="foo_42")
+    """
+    # pylint: disable=protected-access
+    try:
+        context._push(layer)
+        yield context
+    finally:
+        context._pop()
 
 
 def path_getrootdir(path):
@@ -372,32 +538,6 @@ def path_getrootdir(path):
         return drive + os.path.sep
     # -- POSIX:
     return os.path.sep
-
-
-class PathManager(object):
-    """
-    Context manager to add paths to sys.path (python search path) within a scope
-    """
-    def __init__(self, paths=None):
-        self.initial_paths = paths or []
-        self.paths = None
-
-    def __enter__(self):
-        self.paths = list(self.initial_paths)
-        sys.path = self.paths + sys.path
-
-    def __exit__(self, *crap):
-        for path in self.paths:
-            sys.path.remove(path)
-        self.paths = None
-
-    def add(self, path):
-        if self.paths is None:
-            # -- CALLED OUTSIDE OF CONTEXT:
-            self.initial_paths.append(path)
-        else:
-            sys.path.insert(0, path)
-            self.paths.append(path)
 
 
 class ModelRunner(object):
@@ -421,16 +561,11 @@ class ModelRunner(object):
         self.formatters = []
         self.undefined_steps = []
         self.step_registry = step_registry
+        self.capture_controller = CaptureController(config)
 
         self.context = None
         self.feature = None
         self.hook_failures = 0
-
-        self.stdout_capture = None
-        self.stderr_capture = None
-        self.log_capture = None
-        self.old_stdout = None
-        self.old_stderr = None
 
     # @property
     def _get_aborted(self):
@@ -451,7 +586,7 @@ class ModelRunner(object):
     def run_hook(self, name, context, *args):
         if not self.config.dry_run and (name in self.hooks):
             try:
-                with context.user_mode():
+                with context.use_with_user_mode():
                     self.hooks[name](context, *args)
             # except KeyboardInterrupt:
             #     self.aborted = True
@@ -467,75 +602,46 @@ class ModelRunner(object):
                 if "tag" in name:
                     extra = "(tag=%s)" % args[0]
 
-                error_text = ExceptionUtil.describe(e, use_traceback)
-                print(u"HOOK-ERROR in %s%s: %s" % (name, extra, error_text))
+                error_text = ExceptionUtil.describe(e, use_traceback).rstrip()
+                error_message = u"HOOK-ERROR in %s%s: %s" % (name, extra, error_text)
+                print(error_message)
                 self.hook_failures += 1
-                if "step" in name:
-                    step = args[0]
-                    step.hook_failed = True
-                elif "tag" in name:
-                    # -- FEATURE or SCENARIO => Use Feature as collector.
-                    context.feature.hook_failed = True
-                elif "scenario" in name:
-                    scenario = args[0]
-                    scenario.hook_failed = True
-                elif "feature" in name:
-                    feature = args[0]
-                    feature.hook_failed = True
+                if "tag" in name:
+                    # -- SCENARIO or FEATURE
+                    statement = getattr(context, "scenario", context.feature)
                 elif "all" in name:
                     # -- ABORT EXECUTION: For before_all/after_all
                     self.aborted = True
+                    statement = None
+                else:
+                    # -- CASE: feature, scenario, step
+                    statement = args[0]
+
+                if statement:
+                    # -- CASE: feature, scenario, step
+                    statement.hook_failed = True
+                    if statement.error_message:
+                        # -- NOTE: One exception/failure is already stored.
+                        #    Append only error message.
+                        statement.error_message += u"\n"+ error_message
+                    else:
+                        # -- FIRST EXCEPTION/FAILURE:
+                        statement.store_exception_context(e)
+                        statement.error_message = error_message
 
     def setup_capture(self):
         if not self.context:
             self.context = Context(self)
-
-        if self.config.stdout_capture:
-            self.stdout_capture = StringIO()
-            self.context.stdout_capture = self.stdout_capture
-
-        if self.config.stderr_capture:
-            self.stderr_capture = StringIO()
-            self.context.stderr_capture = self.stderr_capture
-
-        if self.config.log_capture:
-            self.log_capture = LoggingCapture(self.config)
-            self.log_capture.inveigle()
-            self.context.log_capture = self.log_capture
+        self.capture_controller.setup_capture(self.context)
 
     def start_capture(self):
-        if self.config.stdout_capture:
-            # -- REPLACE ONLY: In non-capturing mode.
-            if not self.old_stdout:
-                self.old_stdout = sys.stdout
-                sys.stdout = self.stdout_capture
-            assert sys.stdout is self.stdout_capture
-
-        if self.config.stderr_capture:
-            # -- REPLACE ONLY: In non-capturing mode.
-            if not self.old_stderr:
-                self.old_stderr = sys.stderr
-                sys.stderr = self.stderr_capture
-            assert sys.stderr is self.stderr_capture
+        self.capture_controller.start_capture()
 
     def stop_capture(self):
-        if self.config.stdout_capture:
-            # -- RESTORE ONLY: In capturing mode.
-            if self.old_stdout:
-                sys.stdout = self.old_stdout
-                self.old_stdout = None
-            assert sys.stdout is not self.stdout_capture
-
-        if self.config.stderr_capture:
-            # -- RESTORE ONLY: In capturing mode.
-            if self.old_stderr:
-                sys.stderr = self.old_stderr
-                self.old_stderr = None
-            assert sys.stderr is not self.stderr_capture
+        self.capture_controller.stop_capture()
 
     def teardown_capture(self):
-        if self.config.log_capture:
-            self.log_capture.abandon()
+        self.capture_controller.teardown_capture()
 
     def run_model(self, features=None):
         # pylint: disable=too-many-branches
@@ -579,16 +685,25 @@ class ModelRunner(object):
                 reporter.feature(feature)
 
         # -- AFTER-ALL:
+        # pylint: disable=protected-access, broad-except
+        cleanups_failed = False
+        self.run_hook("after_all", self.context)
+        try:
+            self.context._do_cleanups()   # Without dropping the last context layer.
+        except Exception:
+            cleanups_failed = True
+
         if self.aborted:
             print("\nABORTED: By user.")
         for formatter in self.formatters:
             formatter.close()
-        self.run_hook("after_all", self.context)
         for reporter in self.config.reporters:
             reporter.end()
 
         failed = ((failed_count > 0) or self.aborted or (self.hook_failures > 0)
-                  or (len(self.undefined_steps) > undefined_steps_initial_size))
+                  or (len(self.undefined_steps) > undefined_steps_initial_size)
+                  or cleanups_failed)
+                  # XXX-MAYBE: or context.failed)
         return failed
 
     def run(self):
@@ -672,13 +787,13 @@ class Runner(ModelRunner):
                     print('ERROR: Could not find "%s" directory in your '\
                         'specified path "%s"' % (steps_dir, base_dir))
 
-            message = 'No %s directory in "%s"' % (steps_dir, base_dir)
+            message = 'No %s directory in %r' % (steps_dir, base_dir)
             raise ConfigError(message)
 
         base_dir = new_base_dir
         self.config.base_dir = base_dir
 
-        for dirpath, dirnames, filenames in os.walk(base_dir):
+        for dirpath, dirnames, filenames in os.walk(base_dir, followlinks=True):
             if [fn for fn in filenames if fn.endswith(".feature")]:
                 break
         else:
@@ -689,7 +804,7 @@ class Runner(ModelRunner):
                 else:
                     print('ERROR: Could not find any "<name>.feature" files '\
                         'in your specified path "%s"' % base_dir)
-            raise ConfigError('No feature files in "%s"' % base_dir)
+            raise ConfigError('No feature files in %r' % base_dir)
 
         self.base_dir = base_dir
         self.path_manager.add(base_dir)
@@ -719,44 +834,19 @@ class Runner(ModelRunner):
     def load_step_definitions(self, extra_step_paths=None):
         if extra_step_paths is None:
             extra_step_paths = []
-        step_globals = {
-            "use_step_matcher": matchers.use_step_matcher,
-            "step_matcher":     matchers.step_matcher, # -- DEPRECATING
-        }
-        setup_step_decorators(step_globals)
-
         # -- Allow steps to import other stuff from the steps dir
         # NOTE: Default matcher can be overridden in "environment.py" hook.
         steps_dir = os.path.join(self.base_dir, self.config.steps_dir)
-        paths = [steps_dir] + list(extra_step_paths)
-        with PathManager(paths):
-            default_matcher = matchers.current_matcher
-            for path in paths:
-                for name in sorted(os.listdir(path)):
-                    if name.endswith(".py"):
-                        # -- LOAD STEP DEFINITION:
-                        # Reset to default matcher after each step-definition.
-                        # A step-definition may change the matcher 0..N times.
-                        # ENSURE: Each step definition has clean globals.
-                        # try:
-                        step_module_globals = step_globals.copy()
-                        exec_file(os.path.join(path, name), step_module_globals)
-                        matchers.current_matcher = default_matcher
-                        # except Exception as e:
-                        #     e_text = _text(e)
-                        #     print("Exception %s: %s" % \
-                        #           (e.__class__.__name__, e_text))
-                        #     raise
+        step_paths = [steps_dir] + list(extra_step_paths)
+        load_step_modules(step_paths)
 
     def feature_locations(self):
         return collect_feature_locations(self.config.paths)
-
 
     def run(self):
         with self.path_manager:
             self.setup_paths()
             return self.run_with_paths()
-
 
     def run_with_paths(self):
         self.context = Context(self)
@@ -777,7 +867,3 @@ class Runner(ModelRunner):
         stream_openers = self.config.outputs
         self.formatters = make_formatters(self.config, stream_openers)
         return self.run_model()
-
-
-
-

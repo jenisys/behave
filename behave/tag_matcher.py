@@ -1,9 +1,12 @@
-# -*- coding: utf-8 -*-
+# -*- coding: UTF-8 -*-
+"""
+Contains classes and functionality to provide a skip-if logic based on tags
+in feature files.
+"""
 
-from __future__ import absolute_import, unicode_literals
+from __future__ import absolute_import
 import re
 import operator
-import warnings
 import six
 
 
@@ -34,10 +37,10 @@ class ActiveTagMatcher(TagMatcher):
     """Provides an active tag matcher for many categories.
 
     TAG SCHEMA:
-      * active.with_{category}={value}
-      * not_active.with_{category}={value}
       * use.with_{category}={value}
       * not.with_{category}={value}
+      * active.with_{category}={value}
+      * not_active.with_{category}={value}
       * only.with_{category}={value}        (NOTE: For backward compatibility)
 
     TAG LOGIC
@@ -216,50 +219,6 @@ class ActiveTagMatcher(TagMatcher):
         # -- LOGICAL-AND: All parts are True
         return False    # SHOULD-EXCLUDE: not enabled = not True
 
-    # -- OLD-IMPLEMENTATION:
-    # def should_exclude_with(self, tags):
-    #     exclude_decision_map = {}
-    #     exclude_reasons = []
-    #     for category_tag, tag_match in self.select_active_tags(tags):
-    #         # -- FASTER: tag_prefix, category, _, tag_value = tag_match.groups()
-    #         tag_prefix = tag_match.group("prefix")
-    #         category = tag_match.group("category")
-    #         tag_value = tag_match.group("value")
-    #         is_category_tag_switched_on = operator.eq       # equal_to
-    #         if self.is_tag_negated(tag_prefix):
-    #             is_category_tag_switched_on = operator.ne   # not_equal_to
-    #
-    #         current_value = self.value_provider.get(category, None)
-    #         if current_value is None and self.ignore_unknown_categories:
-    #             # -- CASE: Unknown category, ignore it.
-    #             continue
-    #         elif is_category_tag_switched_on(tag_value, current_value):
-    #             # -- CASE: Active tag is switched ON, decision: should run.
-    #             # NOTE: No change, if category is already in exclusion map:
-    #             #   disabled_result  := not enabled_result = not (e1 and e2 ...)
-    #             #                    := (not e1) or (not e2) ...
-    #             #
-    #             #   disabled_result1 := True  or False = True
-    #             #   disabled_result2 := False or False = False  (same tag twice)
-    #             if category not in exclude_decision_map:
-    #                 exclude_decision_map[category] = False
-    #         else:
-    #             # -- CASE: Active tag is switched OFF, decision: exclude it.
-    #             #   disabled_result1 := True  or True = True
-    #             #   disabled_result2 := False or True = True
-    #             exclude_decision_map[category] = True
-    #             if self.use_exclude_reason:
-    #                 reason = "%s (but: %s)" % (category_tag, current_value)
-    #                 exclude_reasons.append(reason)
-    #
-    #     self.exclude_reason = None
-    #     if exclude_reasons:
-    #         # -- DIAGNOSTICS:
-    #         self.exclude_reason = ", ".join(exclude_reasons)
-    #     # -- EXCLUDE-DECISION:
-    #     #    disabled_result := (not e1) or (not e2) ... = not (e1 and e2 ...)
-    #     return any(exclude_decision_map.values())
-
     def select_active_tags(self, tags):
         """Select all active tags that match the tag schema pattern.
 
@@ -329,182 +288,3 @@ def setup_active_tag_values(active_tag_values, data):
     for category in list(active_tag_values.keys()):
         if category in data:
             active_tag_values[category] = data[category]
-
-
-# -----------------------------------------------------------------------------
-# PROTOTYPING CLASSES:
-# -----------------------------------------------------------------------------
-class OnlyWithCategoryTagMatcher(TagMatcher):
-    """
-    Provides a tag matcher that allows to determine if feature/scenario
-    should run or should be excluded from the run-set (at runtime).
-
-    .. deprecated:: Use :class:`ActiveTagMatcher` instead.
-
-    EXAMPLE:
-    --------
-
-    Run some scenarios only when runtime conditions are met:
-
-      * Run scenario Alice only on Windows OS
-      * Run scenario Bob only on MACOSX
-
-    .. code-block:: gherkin
-
-        # -- FILE: features/alice.feature
-        # TAG SCHEMA: @only.with_{category}={current_value}
-        Feature:
-
-          @only.with_os=win32
-          Scenario: Alice (Run only on Windows)
-            Given I do something
-            ...
-
-          @only.with_os=darwin
-          Scenario: Bob (Run only on MACOSX)
-            Given I do something else
-            ...
-
-
-    .. code-block:: python
-
-        # -- FILE: features/environment.py
-        from behave.tag_matcher import OnlyWithCategoryTagMatcher
-        import sys
-
-        # -- MATCHES TAGS: @only.with_{category}=* = @only.with_os=*
-        active_tag_matcher = OnlyWithCategoryTagMatcher("os", sys.platform)
-
-        def before_scenario(context, scenario):
-            if active_tag_matcher.should_exclude_with(scenario.effective_tags):
-                scenario.skip()   #< LATE-EXCLUDE from run-set.
-    """
-    tag_prefix = "only.with_"
-    value_separator = "="
-
-    def __init__(self, category, value, tag_prefix=None, value_sep=None):
-        warnings.warn("Use ActiveTagMatcher instead.", DeprecationWarning)
-        super(OnlyWithCategoryTagMatcher, self).__init__()
-        self.active_tag = self.make_category_tag(category, value,
-                                                 tag_prefix, value_sep)
-        self.category_tag_prefix = self.make_category_tag(category, None,
-                                                          tag_prefix, value_sep)
-
-    def should_exclude_with(self, tags):
-        category_tags = self.select_category_tags(tags)
-        if category_tags and self.active_tag not in category_tags:
-            return True
-        # -- OTHERWISE: feature/scenario with theses tags should run.
-        return False
-
-    def select_category_tags(self, tags):
-        return [tag  for tag in tags
-                if tag.startswith(self.category_tag_prefix)]
-
-    @classmethod
-    def make_category_tag(cls, category, value=None, tag_prefix=None,
-                          value_sep=None):
-        if tag_prefix is None:
-            tag_prefix = cls.tag_prefix
-        if value_sep is None:
-            value_sep = cls.value_separator
-        value = value or ""
-        return "%s%s%s%s" % (tag_prefix, category, value_sep, value)
-
-
-class OnlyWithAnyCategoryTagMatcher(TagMatcher):
-    """
-    Provides a tag matcher that matches any category that follows the
-    "@only.with_" tag schema and determines if it should run or
-    should be excluded from the run-set (at runtime).
-
-    TAG SCHEMA: @only.with_{category}={value}
-
-    .. seealso:: OnlyWithCategoryTagMatcher
-    .. deprecated:: Use :class:`ActiveTagMatcher` instead.
-
-    EXAMPLE:
-    --------
-
-    Run some scenarios only when runtime conditions are met:
-
-      * Run scenario Alice only on Windows OS
-      * Run scenario Bob only with browser Chrome
-
-    .. code-block:: gherkin
-
-        # -- FILE: features/alice.feature
-        # TAG SCHEMA: @only.with_{category}={current_value}
-        Feature:
-
-          @only.with_os=win32
-          Scenario: Alice (Run only on Windows)
-            Given I do something
-            ...
-
-          @only.with_browser=chrome
-          Scenario: Bob (Run only with Web-Browser Chrome)
-            Given I do something else
-            ...
-
-
-    .. code-block:: python
-
-        # -- FILE: features/environment.py
-        from behave.tag_matcher import OnlyWithAnyCategoryTagMatcher
-        import sys
-
-        # -- MATCHES ANY TAGS: @only.with_{category}={value}
-        # NOTE: active_tag_value_provider provides current category values.
-        active_tag_value_provider = {
-            "browser": os.environ.get("BEHAVE_BROWSER", "chrome"),
-            "os":      sys.platform,
-        }
-        active_tag_matcher = OnlyWithAnyCategoryTagMatcher(active_tag_value_provider)
-
-        def before_scenario(context, scenario):
-            if active_tag_matcher.should_exclude_with(scenario.effective_tags):
-                scenario.skip()   #< LATE-EXCLUDE from run-set.
-    """
-
-    def __init__(self, value_provider, tag_prefix=None, value_sep=None):
-        warnings.warn("Use ActiveTagMatcher instead.", DeprecationWarning)
-        super(OnlyWithAnyCategoryTagMatcher, self).__init__()
-        if value_sep is None:
-            value_sep = OnlyWithCategoryTagMatcher.value_separator
-        self.value_provider = value_provider
-        self.tag_prefix = tag_prefix or OnlyWithCategoryTagMatcher.tag_prefix
-        self.value_separator = value_sep
-
-    def should_exclude_with(self, tags):
-        exclude_decision_map = {}
-        for category_tag in self.select_category_tags(tags):
-            category, value = self.parse_category_tag(category_tag)
-            active_value = self.value_provider.get(category, None)
-            if active_value is None:
-                # -- CASE: Unknown category, ignore it.
-                continue
-            elif active_value == value:
-                # -- CASE: Active category value selected, decision should run.
-                exclude_decision_map[category] = False
-            else:
-                # -- CASE: Inactive category value selected, may exclude it.
-                if category not in exclude_decision_map:
-                    exclude_decision_map[category] = True
-        return any(exclude_decision_map.values())
-
-    def select_category_tags(self, tags):
-        return [tag  for tag in tags
-                if tag.startswith(self.tag_prefix)]
-
-    def parse_category_tag(self, tag):
-        assert tag and tag.startswith(self.tag_prefix)
-        category_value = tag[len(self.tag_prefix):]
-        if self.value_separator in category_value:
-            category, value = category_value.split(self.value_separator, 1)
-        else:
-            # -- OOPS: TAG SCHEMA FORMAT MISMATCH
-            category = category_value
-            value = None
-        return category, value
-

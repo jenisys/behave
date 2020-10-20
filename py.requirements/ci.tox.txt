@@ -1,0 +1,13 @@
+# ============================================================================
+# BEHAVE: PYTHON PACKAGE REQUIREMENTS: ci.tox.txt
+# ============================================================================
+
+pytest <  5.0; python_version <  '3.0' # pytest >= 4.2
+pytest >= 5.0; python_version >= '3.0'
+pytest-html >= 1.19.0
+mock >= 2.0
+PyHamcrest >= 1.9
+
+# -- HINT: path.py => path (python-install-package was renamed for python3)
+path.py >= 11.5.0; python_version <  '3.5'
+path >= 13.1.0;    python_version >= '3.5'

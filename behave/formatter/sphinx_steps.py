@@ -16,21 +16,17 @@ TODO:
 """
 
 from __future__ import absolute_import, print_function
-from behave.formatter.steps import AbstractStepsFormatter
-from behave.formatter import sphinx_util
-from behave.model import Table
 from operator import attrgetter
 import inspect
 import os.path
 import sys
-
+from behave.formatter.steps import AbstractStepsFormatter
+from behave.formatter import sphinx_util
+from behave.model import Table
 try:
-    # -- SAFETY-NET:
-    import docutils
-    has_docutils = True
-
     # -- NEEDED FOR: step-labels (and step-refs)
     from docutils.nodes import fully_normalize_name
+    has_docutils = True
 except ImportError:
     has_docutils = False
 
@@ -144,9 +140,9 @@ class SphinxStepsDocumentGenerator(object):
         else:
             step_type_text = step_type.capitalize()
         # -- ESCAPE: Some chars required for ReST documents (like backticks)
-        step_text = step_definition.string
+        step_text = step_definition.pattern
         if "`" in step_text:
-            step_text = step_text.replace("`", "\`")
+            step_text = step_text.replace("`", r"\`")
         return u"%s %s" % (step_type_text, step_text)
 
     def ensure_destdir_exists(self):
@@ -252,6 +248,7 @@ The following step definitions are provided here.
         headings = [u"Step Definition", u"Given", u"When", u"Then", u"Step"]
         table = Table(headings)
         step_type_cols = {
+            # -- pylint: disable=bad-whitespace
             "given": [u"  x", u"  ",  u"  ",  u"  "],
             "when":  [u"  ",  u"  x", u"  ",  u"  "],
             "then":  [u"  ",  u"  ",  u"  x", u"  "],
@@ -264,11 +261,11 @@ The following step definitions are provided here.
         self.document.write_table(table)
 
     @staticmethod
-    def make_step_definition_index_id(step_definition):
-        if step_definition.step_type == "step":
+    def make_step_definition_index_id(step):
+        if step.step_type == "step":
             index_kinds = ("Given", "When", "Then", "Step")
         else:
-            keyword = step_definition.step_type.capitalize()
+            keyword = step.step_type.capitalize()
             index_kinds = (keyword,)
 
         schema = "single: %s%s; %s %s"
@@ -279,26 +276,26 @@ The following step definitions are provided here.
             if index_kind == "Step":
                 keyword = "Given/When/Then"
                 word = ""
-            part = schema % (index_kind, word, keyword, step_definition.string)
+            part = schema % (index_kind, word, keyword, step.pattern)
             index_parts.append(part)
         joiner = "\n    "
         return joiner + joiner.join(index_parts)
 
-    def make_step_definition_doc(self, step_definition):
-        doc = inspect.getdoc(step_definition.func)
+    def make_step_definition_doc(self, step):
+        doc = inspect.getdoc(step.func)
         if not doc:
             doc = self.default_step_definition_doc
         doc = doc.strip()
         return doc
 
-    def write_step_definition(self, step_definition):
+    def write_step_definition(self, step):
         assert self.document
-        step_text = self.describe_step_definition(step_definition)
+        step_text = self.describe_step_definition(step)
         if step_text.startswith("* "):
             step_text = step_text[2:]
         index_id = None
         if self.make_step_index_entries:
-            index_id = self.make_step_definition_index_id(step_definition)
+            index_id = self.make_step_definition_index_id(step)
 
         heading = step_text
         step_label = None
@@ -309,9 +306,9 @@ The following step definitions are provided here.
             # EXAMPLE: See also :ref:`When my step does "{something}"`.
             step_label = fully_normalize_name(step_text)
             # SKIP-HERE: self.document.write(".. _%s:\n\n" % step_label)
-        self.document.write_heading(heading, level=2, index_id=index_id, 
+        self.document.write_heading(heading, level=2, index_id=index_id,
                                     label=step_label)
-        step_definition_doc = self.make_step_definition_doc(step_definition)
+        step_definition_doc = self.make_step_definition_doc(step)
         self.document.write("%s\n" % step_definition_doc)
         self.document.write("\n")
 
@@ -342,14 +339,12 @@ class SphinxStepsFormatter(AbstractStepsFormatter):
 
     @property
     def step_definitions(self):
-        """
-        Derive step definitions from step-registry.
-        """
+        """Derive step definitions from step-registry."""
         steps = []
         for step_type, step_definitions in self.step_registry.steps.items():
-            for step_definition in step_definitions:
-                step_definition.step_type = step_type
-                steps.append(step_definition)
+            for step in step_definitions:
+                step.step_type = step_type
+                steps.append(step)
         return steps
 
     # -- FORMATTER-API:
@@ -364,8 +359,8 @@ class SphinxStepsFormatter(AbstractStepsFormatter):
         generator_class = self.doc_generator_class
         if self.stdout_mode:
             return generator_class(self.step_definitions, stream=self.stream)
-        else:
-            return generator_class(self.step_definitions, destdir=self.destdir)
+        # -- OTHERWISE:
+        return generator_class(self.step_definitions, destdir=self.destdir)
 
     def report(self):
         document_generator = self.create_document_generator()

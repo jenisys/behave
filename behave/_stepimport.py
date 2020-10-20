@@ -9,14 +9,15 @@ This module provides low-level helper functionality during step imports.
     instead of using the global module specific variables.
 """
 
-from behave import step_registry as _step_registry
-# from behave import matchers as _matchers
+from __future__ import absolute_import
 from contextlib import contextmanager
 from threading import Lock
+from types import ModuleType
 import os.path
 import sys
+from behave import step_registry as _step_registry
+# from behave import matchers as _matchers
 import six
-from types import ModuleType
 
 
 # -----------------------------------------------------------------------------
@@ -53,6 +54,7 @@ class StepRegistryModule(FakeModule):
     ]
 
     def __init__(self, step_registry):
+        super(StepRegistryModule, self).__init__("behave.step_registry")
         self.registry = step_registry
         setup_api_with_step_decorators(self, step_registry)
 
@@ -61,6 +63,7 @@ class StepMatchersModule(FakeModule):
     __all__ = ["use_step_matcher", "register_type", "step_matcher"]
 
     def __init__(self, matcher_factory):
+        super(StepMatchersModule, self).__init__("behave.matchers")
         self.matcher_factory = matcher_factory
         setup_api_with_matcher_functions(self, matcher_factory)
         self.use_default_step_matcher = matcher_factory.use_default_step_matcher
@@ -82,9 +85,9 @@ class StepMatchersModule(FakeModule):
     # def use_default_step_matcher(self, name=None):
     #     self.matcher_factory.use_default_step_matcher(name=None)
     #
-    # def get_matcher(self, func, string):
+    # def get_matcher(self, func, pattern):
     #     # return self.current_matcher
-    #     return self.matcher_factory.make_matcher(func, string)
+    #     return self.matcher_factory.make_matcher(func, pattern)
     #
     # def register_type(self, **kwargs):
     #     # _matchers.register_type(**kwargs)
@@ -100,6 +103,7 @@ class BehaveModule(FakeModule):
         if matcher_factory is None:
             matcher_factory = step_registry.step_matcher_factory
         assert matcher_factory is not None
+        super(BehaveModule, self).__init__("behave")
         setup_api_with_step_decorators(self, step_registry)
         setup_api_with_matcher_functions(self, matcher_factory)
         self.use_default_step_matcher = matcher_factory.use_default_step_matcher

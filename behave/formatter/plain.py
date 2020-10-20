@@ -23,8 +23,11 @@ class PlainFormatter(Formatter):
 
     SHOW_MULTI_LINE = True
     SHOW_TAGS = False
+    SHOW_RULES = True
+    SHOW_BACKGROUNDS = True
     SHOW_ALIGNED_KEYWORDS = False
     DEFAULT_INDENT_SIZE = 2
+    RAISE_OUTPUT_ERRORS = True
 
     def __init__(self, stream_opener, config, **kwargs):
         super(PlainFormatter, self).__init__(stream_opener, config)
@@ -34,6 +37,7 @@ class PlainFormatter(Formatter):
         self.show_aligned_keywords = self.SHOW_ALIGNED_KEYWORDS
         self.show_tags = self.SHOW_TAGS
         self.indent_size = self.DEFAULT_INDENT_SIZE
+        self.current_rule = None
         # -- ENSURE: Output stream is open.
         self.stream = self.open()
         self.printer = ModelPrinter(self.stream)
@@ -48,6 +52,10 @@ class PlainFormatter(Formatter):
                 offset = 2
             indentation = make_indentation(3 * self.indent_size + offset)
             self._multiline_indentation = indentation
+
+        if self.current_rule:
+            indent_extra = make_indentation(self.indent_size)
+            return self._multiline_indentation + indent_extra
         return self._multiline_indentation
 
     def reset_steps(self):
@@ -59,44 +67,69 @@ class PlainFormatter(Formatter):
             text = " @".join(tags)
             self.stream.write(u"%s@%s\n" % (indent, text))
 
+    def write_entity(self, entity, indent="", has_tags=True):
+        if has_tags:
+            self.write_tags(entity.tags, indent)
+        text = u"%s%s: %s\n" % (indent, entity.keyword, entity.name)
+        self.stream.write(text)
+
     # -- IMPLEMENT-INTERFACE FOR: Formatter
     def feature(self, feature):
+        self.current_rule = None
         self.reset_steps()
-        self.write_tags(feature.tags)
-        self.stream.write(u"%s: %s\n" % (feature.keyword, feature.name))
+        self.write_entity(feature)
+        # self.write_tags(feature.tags)
+        # self.stream.write(u"%s: %s\n" % (feature.keyword, feature.name))
+
+    def rule(self, rule):
+        self.current_rule = rule
+        self.reset_steps()
+        indent = make_indentation(self.indent_size)
+        self.stream.write(u"\n")
+        self.write_entity(rule, indent)
+        # self.stream.write(u"%s%s: %s\n" % (indent, rule.keyword, rule.name))
 
     def background(self, background):
         self.reset_steps()
-        indent = make_indentation(self.indent_size)
-        text = u"%s%s: %s\n" % (indent, background.keyword, background.name)
-        self.stream.write(text)
+        if not self.SHOW_BACKGROUNDS:
+            return
+
+        indent_extra = 0
+        if self.current_rule:
+            indent_extra = self.indent_size
+
+        indent = make_indentation(self.indent_size + indent_extra)
+        self.write_entity(background, indent, has_tags=False)
+        # text = u"%s%s: %s\n" % (indent, background.keyword, background.name)
+        # self.stream.write(text)
 
     def scenario(self, scenario):
+        indent_extra = 0
+        if self.current_rule:
+            indent_extra = self.indent_size
+
         self.reset_steps()
         self.stream.write(u"\n")
-        indent = make_indentation(self.indent_size)
-        text = u"%s%s: %s\n" % (indent, scenario.keyword, scenario.name)
-        self.write_tags(scenario.tags, indent)
-        self.stream.write(text)
-
-    def scenario_outline(self, outline):
-        self.reset_steps()
-        indent = make_indentation(self.indent_size)
-        text = u"%s%s: %s\n" % (indent, outline.keyword, outline.name)
-        self.write_tags(outline.tags, indent)
-        self.stream.write(text)
+        indent = make_indentation(self.indent_size + indent_extra)
+        self.write_entity(scenario, indent)
+        # text = u"%s%s: %s\n" % (indent, scenario.keyword, scenario.name)
+        # self.write_tags(scenario.tags, indent)
+        # self.stream.write(text)
 
     def step(self, step):
         self.steps.append(step)
 
-    def result(self, result):
-        """
-        Process the result of a step (after step execution).
+    def result(self, step):
+        """Process the result of a step (after step execution).
 
-        :param result:
+        :param step:   Step object with result to process.
         """
+        indent_extra = 0
+        if self.current_rule:
+            indent_extra = self.indent_size
+
         step = self.steps.pop(0)
-        indent = make_indentation(2 * self.indent_size)
+        indent = make_indentation(2 * self.indent_size + indent_extra)
         if self.show_aligned_keywords:
             # -- RIGHT-ALIGN KEYWORDS (max. keyword width: 6):
             text = u"%s%6s %s ... " % (indent, step.keyword, step.name)
@@ -104,18 +137,34 @@ class PlainFormatter(Formatter):
             text = u"%s%s %s ... " % (indent, step.keyword, step.name)
         self.stream.write(text)
 
-        status = result.status
+        status_text = step.status.name
         if self.show_timings:
-            status += " in %0.3fs" % step.duration
+            status_text += " in %0.3fs" % step.duration
 
-        if result.error_message:
-            self.stream.write(u"%s\n%s\n" % (status, result.error_message))
+        unicode_errors = 0
+        if step.error_message:
+            try:
+                self.stream.write(u"%s\n%s\n" % (status_text, step.error_message))
+            except UnicodeError as e:
+                unicode_errors += 1
+                self.stream.write(u"%s\n" % status_text)
+                self.stream.write(u"%s while writing error message: %s\n" % \
+                                  (e.__class__.__name__, e))
+                if self.RAISE_OUTPUT_ERRORS:
+                    raise
         else:
-            self.stream.write(u"%s\n" % status)
+            self.stream.write(u"%s\n" % status_text)
 
         if self.show_multiline:
             if step.text:
-                self.doc_string(step.text)
+                try:
+                    self.doc_string(step.text)
+                except UnicodeError as e:
+                    unicode_errors += 1
+                    self.stream.write(u"%s while writing docstring: %s\n" % \
+                                      (e.__class__.__name__, e))
+                    if self.RAISE_OUTPUT_ERRORS:
+                        raise
             if step.table:
                 self.table(step.table)
 

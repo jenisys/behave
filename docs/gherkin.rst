@@ -10,35 +10,33 @@ Feature Testing Layout
 
 *behave* works with three types of files:
 
-1. `feature files`_ written by your Business Analyst / Sponsor / whoever
+1. :ref:`Feature files <docid.gherkin>` written by your Business Analyst / Sponsor / whoever
    with your behaviour scenarios in it, and
-2. a "steps" directory with `Python step implementations`_ for the
+2. a "steps" directory with :ref:`Python step implementations <docid.tutorial.python-step-implementations>` for the
    scenarios.
-3. optionally some `environmental controls`_ (code to run before and after
+3. optionally some :ref:`environmental controls <docid.tutorial.environmental-controls>` (code to run before and after
    steps, scenarios, features or the whole shooting match).
 
-.. _`feature files`: #gherkin-feature-testing-language
-.. _`Python step implementations`: tutorial.html#python-step-implementations
-.. _`environmental controls`: tutorial.html#environmental-controls
 
 These files are typically stored in a directory called "features". The
 minimum requirement for a features directory is::
 
-  features/
-  features/everything.feature
-  features/steps/
-  features/steps/steps.py
+    +--features/
+    |   +--steps/       # -- Steps directory
+    |   |    +-- *.py   # -- Step implementation or use step-library python files.
+    |   +-- *.feature   # -- Feature files.
 
 A more complex directory might look like::
 
-  features/
-  features/signup.feature
-  features/login.feature
-  features/account_details.feature
-  features/environment.py
-  features/steps/
-  features/steps/website.py
-  features/steps/utils.py
+  +-- features/
+  |     +-- steps/
+  |     |    +-- website_steps.py
+  |     |    +-- utils.py
+  |     |
+  |     +-- environment.py      # -- Environment file with behave hooks, etc.
+  |     +-- signup.feature
+  |     +-- login.feature
+  |     +-- account_details.feature
 
 
 Layout Variations
@@ -55,7 +53,7 @@ line:
 
 **a features directory path**
   This is the path to a features directory laid out as described above. It may be called
-  anything by *must* contain at least one "*name*.feature" file and a directory
+  anything but *must* contain at least one "*name*.feature" file and a directory
   called "steps". The "environment.py" file, if present, must be in the same
   directory that contains the "steps" directory (not *in* the "steps"
   directory).
@@ -74,25 +72,27 @@ line:
   same place then *behave* will search for it just like above. This allows
   you to have a layout like::
 
-   tests/
-   tests/environment.py
-   tests/features/signup.feature
-   tests/features/login.feature
-   tests/features/account_details.feature
-   tests/steps/
-   tests/steps/website.py
-   tests/steps/utils.py
+   +--tests/
+   |    +-- steps/
+   |    |    +-- use_steplib_xyz.py
+   |    |    +-- website_steps.py
+   |    |    +-- utils.py
+   |    +-- environment.py
+   |    +-- signup.feature
+   |    +-- login.feature
+   |    +-- account_details.feature
 
   Note that with this approach, if you want to execute *behave* without having
   to explicitly specify the directory (first option) you can set the ``paths``
-  setting in your `configuration file`_ (e.g. ``paths=tests``).
+  setting in your :ref:`configuration file <docid.behave.configuration-files>`
+  (e.g. ``paths=tests``).
 
 If you're having trouble setting things up and want to see what *behave* is
 doing in attempting to find your features use the "-v" (verbose)
 command-line switch.
 
-.. _`configuration file`: behave.html#configuration-files
 
+.. _docid.gherkin:
 .. _chapter.gherkin:
 
 Gherkin: Feature Testing Language
@@ -118,7 +118,7 @@ structure in the text. Most lines start with a keyword ("Feature",
 Comment lines are allowed anywhere in the file. They begin with zero or
 more spaces, followed by a sharp sign (#) and some amount of text.
 
-.. _`gherkin`: https://github.com/cucumber/cucumber/wiki/Gherkin
+.. _`gherkin`: https://docs.cucumber.io/gherkin/reference/
 
 
 Features
@@ -132,8 +132,8 @@ a background and a set of tags. In its simplest form a feature looks like:
   Feature: feature name
 
     Scenario: some scenario
-        Given some condition
-         Then some result is expected.
+      Given some condition
+       Then some result is expected.
 
 In all its glory it could look like:
 
@@ -179,10 +179,8 @@ It allows you to add some context to the scenarios of a feature.
 A background is executed before each scenario of this feature but after any
 of the before hooks. It is useful for performing setup operations like:
 
-  * logging into a web browser or
-  * setting up a database
-
-with test data used by the scenarios.
+* logging into a web browser or
+* setting up a database with test data used by the scenarios.
 
 The background description is for the benefit of humans reading the feature text.
 Again the background name should just be a reasonably descriptive title
@@ -204,8 +202,8 @@ Don’t use "Background" to set up complicated state unless that state is actual
 Keep your "Background" section short.
  You’re expecting the user to actually remember this stuff when reading
  your scenarios. If the background is more than 4 lines long, can you move
- some of the irrelevant details into high-level steps? See `calling steps
- from other steps`_.
+ some of the irrelevant details into high-level steps? See :ref:`calling steps
+ from other steps <docid.api.calling-steps-from-other-steps>`.
 
 Make your "Background" section vivid.
  You should use colorful names and try to tell a story, because the human
@@ -216,8 +214,7 @@ Keep your scenarios short, and don’t have too many.
  If the background section has scrolled off the screen, you should think
  about using higher-level steps, or splitting the features file in two.
 
-.. _`calling steps from other steps`: api.html#calling-steps-from-other-steps
-.. _`Cucumber Background description`: https://github.com/cucumber/cucumber/wiki/Background
+.. _`Cucumber Background description`: https://docs.cucumber.io/gherkin/reference/#background
 
 
 Scenarios
@@ -241,20 +238,21 @@ some test will pass." In this simplest form, a scenario might be:
 There may be additional conditions imposed on the scenario, and these would
 take the form of "when" steps following the initial "given" condition. If
 necessary, additional "and" or "but" steps may also follow the "given",
-"when" and "then" steps if more needs to be tested. A more complex example
+"when" and "then" steps if more conditions need to be tested. A more complex example
 of a scenario might be:
 
 .. code-block:: gherkin
 
- Scenario: Replaced items should be returned to stock
-   Given that a customer buys a blue garment
-     and I have two blue garments in stock
-     but I have no red garments in stock
-     and three black garments in stock.
-    When he returns the garment for a replacement in black,
-    then I should have three blue garments in stock
-     and no red garments in stock,
-     and two black garments in stock.
+    Scenario: Replaced items should be returned to stock
+      Given that a customer buys a blue garment
+        and I have two blue garments in stock
+        but I have no red garments in stock
+        and three black garments in stock.
+       When he returns the garment for a replacement in black,
+       then I should have three blue garments in stock
+        and no red garments in stock,
+        and two black garments in stock.
+
 
 It is good practise to have a scenario test only one behaviour or desired
 outcome.
@@ -314,13 +312,14 @@ mechanics of testing; that is, instead of:
 
 .. code-block:: gherkin
 
-  Given a browser client is used to load the URL "http://website.example/website/home.html"
+    Given a browser client is used to load the URL "http://website.example/website/home.html"
 
 the step could instead simply say:
 
 .. code-block:: gherkin
 
-  Given we are looking at the home page
+    Given we are looking at the home page
+
 
 Steps are implemented using Python code which is implemented in the "steps"
 directory in Python modules (files with Python code which are named
@@ -371,9 +370,9 @@ Examples:
 - Developing a library? Kicking off some kind of action that has an
   observable effect somewhere else.
 
-.. _`requests`: http://docs.python-requests.org/en/latest/
-.. _`twill`:    http://twill.idyll.org/
-.. _`selenium`: http://docs.seleniumhq.org/projects/webdriver/
+.. _`requests`: http://docs.python-requests.org/en/master/
+.. _`twill`:    https://pypi.org/project/twill
+.. _`selenium`: https://docs.seleniumhq.org/projects/webdriver/
 
 
 Then
@@ -402,25 +401,25 @@ If you have several givens, whens or thens you could write:
 
 .. code-block:: gherkin
 
-  Scenario: Multiple Givens
-    Given one thing
-    Given an other thing
-    Given yet an other thing
-     When I open my eyes
-     Then I see something
-     Then I don't see something else
+    Scenario: Multiple Givens
+      Given one thing
+      Given another thing
+      Given yet another thing
+       When I open my eyes
+       Then I see something
+       Then I don't see something else
 
 Or you can make it read more fluently by writing:
 
 .. code-block:: gherkin
 
-  Scenario: Multiple Givens
-    Given one thing
-      And an other thing
-      And yet an other thing
-     When I open my eyes
-     Then I see something
-      But I don't see something else
+    Scenario: Multiple Givens
+      Given one thing
+        And another thing
+        And yet another thing
+       When I open my eyes
+       Then I see something
+        But I don't see something else
 
 The two scenarios are identical to *behave* - steps beginning with "and" or
 "but" are exactly the same kind of steps as all the others. They simply
@@ -531,24 +530,24 @@ include underscores "_"). Valid tag lines include::
 
     @slow
     @wip
-    @needs_database @slow
+    @needs_database
 
 For example:
 
 .. code-block:: gherkin
 
-   @wip @slow
-   Feature: annual reporting
-     Some description of a slow reporting system.
+    @wip @slow
+    Feature: annual reporting
+      Some description of a slow reporting system.
 
 or:
 
 .. code-block:: gherkin
 
-   @wip
-   @slow
-   Feature: annual reporting
-     Some description of a slow reporting system.
+    @wip
+    @slow
+    Feature: annual reporting
+      Some description of a slow reporting system.
 
 Tags may be used to `control your test run`_ by only including certain
 features or scenarios based on tag selection. The tag information may also
@@ -565,11 +564,11 @@ Given a feature file with:
 
 .. code-block:: gherkin
 
-  Feature: Fight or flight
-    In order to increase the ninja survival rate,
-    As a ninja commander
-    I want my ninjas to decide whether to take on an
-    opponent based on their skill levels
+    Feature: Fight or flight
+      In order to increase the ninja survival rate,
+      As a ninja commander
+      I want my ninjas to decide whether to take on an
+      opponent based on their skill levels
 
     @slow
     Scenario: Weaker opponent
@@ -582,19 +581,20 @@ Given a feature file with:
       When attacked by Chuck Norris
       Then the ninja should run for his life
 
-then running ``behave --tags=slow`` will run just the scenarios tagged
+
+Running ``behave --tags=slow`` will run just the scenarios tagged
 ``@slow``. If you wish to check everything *except* the slow ones then you
-may run ``behave --tags=-slow``.
+may run ``behave --tags="not slow"``.
 
 Another common use-case is to tag a scenario you're working on with
 ``@wip`` and then ``behave --tags=wip`` to just test that one case.
 
 Tag selection on the command-line may be combined:
 
-**--tags=wip,slow**
+**--tags="wip or slow"**
    This will select all the cases tagged *either* "wip" or "slow".
 
-**--tags=wip --tags=slow**
+**--tags="wip and slow"**
    This will select all the cases tagged *both* "wip" and "slow".
 
 If a feature or scenario is tagged and then skipped because of a
@@ -610,32 +610,66 @@ the environment functions via the "feature" or "scenario" object passed to
 them. On those objects there is an attribute called "tags" which is a list
 of the tag names attached, in the order they're found in the features file.
 
-There are also `environmental controls`_ specific to tags, so in the above
-example *behave* will attempt to invoke an ``environment.py`` function
-``before_tag`` and ``after_tag`` before and after the Scenario tagged
-``@slow``, passing in the name "slow". If multiple tags are present then
-the functions will be called multiple times with each tag in the order
-they're defined in the feature file.
+There are also :ref:`environmental controls <docid.tutorial.environmental-controls>`
+specific to tags, so in the above example *behave* will attempt to invoke
+an ``environment.py`` function ``before_tag`` and ``after_tag`` before and after
+the Scenario tagged ``@slow``, passing in the name "slow".
+If multiple tags are present then the functions will be called multiple times
+with each tag in the order they're defined in the feature file.
 
 Re-visiting the example from above; if only some of the features required a
-browser and web server then you could tag them ``@browser``:
+browser and web server then you could tag them ``@fixture.browser`` and
+``@fixture.webserver``:
 
 .. code-block:: python
 
-  def before_feature(context, feature):
-      model.init(environment='test')
-      if 'browser' in feature.tags:
-          context.server = simple_server.WSGIServer(('', 8000))
-          context.server.set_app(web_app.main(environment='test'))
-          context.thread = threading.Thread(target=context.server.serve_forever)
-          context.thread.start()
-          context.browser = webdriver.Chrome()
+    # -- FILE: features/environment.py
+    from behave.fixture import fixture, use_fixture_by_tag
 
-  def after_feature(context, feature):
-      if 'browser' in feature.tags:
-          context.server.shutdown()
-          context.thread.join()
-          context.browser.quit()
+    @fixture
+    def webserver(context):
+        # -- STEP: Setup browser fixture
+        context.server = simple_server.WSGIServer(("", 8000))
+        context.server.set_app(web_app.main(environment='test'))
+        context.thread = threading.Thread(target=context.server.serve_forever)
+        context.thread.start()
+        yield context.server
+        # -- STEP: Teardown/cleanup fixture
+        context.server.shutdown()
+        context.thread.join()
+
+    @fixture
+    def browser_chrome(context):
+        # -- STEP: Setup browser fixture
+        context.browser = webdriver.Chrome()
+        yield context.browser
+        # -- STEP: Teardown/cleanup fixture
+        context.browser.quit()
+
+
+    fixture_registry = {
+        "fixture.browser":   browser_chrome,
+        "fixture.webserver": webserver,
+    }
+
+    # -- BEHAVE HOOKS:
+    def before_feature(context, feature):
+        model.init(environment='test')
+
+    def before_tag(context, tag):
+        if tag.startswith("fixture."):
+            # USE-FIXTURE FOR TAGS: @fixture.browser, @fixture.webserver
+            return use_fixture_by_tag(tag, context, fixture_registry):
+
+
+.. code-block:: gherkin
+
+    # -- FILE: features/use_browser.feature
+    # HINT: Fixture are automatically setutp and teardown via fixture-tags.
+    @fixture.webserver
+    @fixture.browser
+    Feature: Use Webserver and browser
+        ...
 
 
 Languages Other Than English
@@ -652,6 +686,7 @@ you have two options:
 
 1. add a line to the top of the feature files like (for French):
 
+    # -- FILE: features/some.feature
     # language: fr
 
 2. use the command-line switch ``--lang``::

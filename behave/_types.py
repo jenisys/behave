@@ -1,6 +1,13 @@
 # -*- coding: UTF-8 -*-
 """Basic types (helper classes)."""
+
 import sys
+import six
+if six.PY2:
+    # -- USE PYTHON2 BACKPORT: With unicode support
+    import traceback2 as traceback
+else:
+    import traceback
 
 
 class Unknown(object):
@@ -49,12 +56,11 @@ class ExceptionUtil(object):
     def describe(cls, exception, use_traceback=False, prefix=""):
         # -- NORMAL CASE:
         text = u"{prefix}{0}: {1}\n".format(exception.__class__.__name__,
-                                              exception, prefix=prefix)
+                                            exception, prefix=prefix)
         if use_traceback:
             exc_traceback = cls.get_traceback(exception)
             if exc_traceback:
                 # -- NOTE: Chained-exception cause (see: PEP-3134).
-                import traceback
                 text += u"".join(traceback.format_tb(exc_traceback))
         return text
 
@@ -77,7 +83,12 @@ class ChainedExceptionUtil(ExceptionUtil):
         assert isinstance(exception, Exception)
         assert isinstance(exc_cause, Exception) or exc_cause is None
         exception.__cause__ = exc_cause
+        if exc_cause and not hasattr(exc_cause, "__traceback__"):
+            # -- NEEDED-FOR: Python2
+            # Otherwise, traceback formatting tries to access missing attribute.
+            exc_cause.__traceback__ = None
 
+    # pylint: disable=arguments-differ
     @classmethod
     def describe(cls, exception, use_traceback=False, prefix="", style="reversed"):
         """Describes an exception, optionally together with its traceback info.

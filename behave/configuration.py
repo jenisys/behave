@@ -14,17 +14,19 @@ from behave.model import ScenarioOutline
 from behave.model_core import FileLocation
 from behave.reporter.junit import JUnitReporter
 from behave.reporter.summary import SummaryReporter
-from behave.tag_expression import TagExpression
+from behave.tag_expression import make_tag_expression
 from behave.formatter.base import StreamOpener
 from behave.formatter import _registry as _format_registry
 from behave.userdata import UserData, parse_user_define
 from behave._types import Unknown
+from behave.textutil import select_best_encoding, to_texts
 
 # -- PYTHON 2/3 COMPATIBILITY:
 # SINCE Python 3.2: ConfigParser = SafeConfigParser
 ConfigParser = configparser.ConfigParser
 if six.PY2:
     ConfigParser = configparser.SafeConfigParser
+
 
 # -----------------------------------------------------------------------------
 # CONFIGURATION DATA TYPES:
@@ -58,12 +60,6 @@ class LogLevel(object):
     @staticmethod
     def to_string(level):
         return logging.getLevelName(level)
-
-
-class ConfigError(Exception):
-    pass
-
-
 
 
 # -----------------------------------------------------------------------------
@@ -168,11 +164,11 @@ options = [
                   override a configuration file setting.""")),
 
     (("-n", "--name"),
-     dict(action="append",
-          help="""Only execute the feature elements which match part
-                  of the given name. If this option is given more
-                  than once, it will match against all the given
-                  names.""")),
+     dict(action="append", metavar="NAME_PATTERN",
+          help="""Select feature elements (scenarios, ...) to run
+                  which match part of the given name (regex pattern).
+                  If this option is given more than once,
+                  it will match against all the given names.""")),
 
     (("--no-capture",),
      dict(action="store_false", dest="stdout_capture",
@@ -299,7 +295,7 @@ options = [
     #    help="Fail if there are any undefined or pending steps.")),
 
     ((),  # -- CONFIGFILE only
-     dict(dest="default_tags", metavar="TAG_EXPRESSION",
+     dict(dest="default_tags", metavar="TAG_EXPRESSION", action="append",
           help="""Define default tags when non are provided.
                   See --tags for more information.""")),
 
@@ -445,7 +441,8 @@ def config_filenames():
         paths.append(os.path.join(os.environ["APPDATA"]))
 
     for path in reversed(paths):
-        for filename in reversed(("behave.ini", ".behaverc", "setup.cfg")):
+        for filename in reversed(
+                ("behave.ini", ".behaverc", "setup.cfg", "tox.ini")):
             filename = os.path.join(path, filename)
             if os.path.isfile(filename):
                 yield filename
@@ -465,7 +462,7 @@ def load_configuration(defaults, verbose=False):
 
 def setup_parser():
     # construct the parser
-    #usage = "%(prog)s [options] [ [FILE|DIR|URL][:LINE[:LINE]*] ]+"
+    # usage = "%(prog)s [options] [ [FILE|DIR|URL][:LINE[:LINE]*] ]+"
     usage = "%(prog)s [options] [ [DIR|FILE|FILE:LINE] ]+"
     description = """\
     Run a number of feature tests with behave."""
@@ -487,6 +484,7 @@ def setup_parser():
     parser.add_argument("paths", nargs="*",
                         help="Feature directory, file or file location (FILE:LINE).")
     return parser
+
 
 class Configuration(object):
     """Configuration object for behave and behave runners."""
@@ -534,11 +532,15 @@ class Configuration(object):
         if command_args is None:
             command_args = sys.argv[1:]
         elif isinstance(command_args, six.string_types):
+            encoding = select_best_encoding() or "utf-8"
             if six.PY2 and isinstance(command_args, six.text_type):
-                command_args = command_args.encode("utf-8")
+                command_args = command_args.encode(encoding)
             elif six.PY3 and isinstance(command_args, six.binary_type):
-                command_args = command_args.decode("utf-8")
+                command_args = command_args.decode(encoding)
             command_args = shlex.split(command_args)
+        elif isinstance(command_args, (list, tuple)):
+            command_args = to_texts(command_args)
+
         if verbose is None:
             # -- AUTO-DISCOVER: Verbose mode from command-line args.
             verbose = ("-v" in command_args) or ("--verbose" in command_args)
@@ -582,13 +584,23 @@ class Configuration(object):
                 continue
             setattr(self, key, value)
 
+        # -- ATTRIBUTE-NAME-CLEANUP:
+        self.tag_expression = None
+        self._tags = self.tags
+        self.tags = None
+        if isinstance(self.default_tags, six.string_types):
+            self.default_tags = self.default_tags.split()
+
         self.paths = [os.path.normpath(path) for path in self.paths]
         self.setup_outputs(args.outfiles)
 
         if self.steps_catalog:
             # -- SHOW STEP-CATALOG: As step summary.
             self.default_format = "steps.catalog"
-            self.format = ["steps.catalog"]
+            if self.format:
+                self.format.append("steps.catalog")
+            else:
+                self.format = ["steps.catalog"]
             self.dry_run = True
             self.summary = False
             self.show_skipped = False
@@ -601,13 +613,15 @@ class Configuration(object):
             #  * do not capture stdout or logging output and
             #  * stop at the first failure.
             self.default_format = "plain"
-            self.tags = ["wip"] + self.default_tags.split()
+            self._tags = ["wip"] + self.default_tags
             self.color = False
             self.stop = True
             self.log_capture = False
             self.stdout_capture = False
 
-        self.tags = TagExpression(self.tags or self.default_tags.split())
+        self.tag_expression = make_tag_expression(self._tags or self.default_tags)
+        # -- BACKWARD-COMPATIBLE (BAD-NAMING STYLE; deprecating):
+        self.tags = self.tag_expression
 
         if self.quiet:
             self.show_source = False
@@ -622,6 +636,15 @@ class Configuration(object):
             # -- SELECT: Scenario-by-name, build regular expression.
             self.name_re = self.build_name_re(self.name)
 
+        if self.stage is None:  # pylint: disable=access-member-before-definition
+            # -- USE ENVIRONMENT-VARIABLE, if stage is undefined.
+            self.stage = os.environ.get("BEHAVE_STAGE", None)
+        self.setup_stage(self.stage)
+        self.setup_model()
+        self.setup_userdata()
+
+        # -- FINALLY: Setup Reporters and Formatters
+        # NOTE: Reporters and Formatters can now use userdata information.
         if self.junit:
             # Buffer the output (it will be put into Junit report)
             self.stdout_capture = True
@@ -636,12 +659,6 @@ class Configuration(object):
         if unknown_formats:
             parser.error("format=%s is unknown" % ", ".join(unknown_formats))
 
-        if self.stage is None:  # pylint: disable=access-member-before-definition
-            # -- USE ENVIRONMENT-VARIABLE, if stage is undefined.
-            self.stage = os.environ.get("BEHAVE_STAGE", None)
-        self.setup_stage(self.stage)
-        self.setup_model()
-        self.setup_userdata()
 
     def setup_outputs(self, args_outfiles=None):
         if self.outputs:
@@ -683,8 +700,12 @@ class Configuration(object):
         :param names: List of name parts or regular expressions (as text).
         :return: Compiled regular expression to use.
         """
+        # -- NOTE: re.LOCALE is removed in Python 3.6 (deprecated in Python 3.5)
+        # flags = (re.UNICODE | re.LOCALE)
+        # -- ENSURE: Names are all unicode/text values (for issue #606).
+        names = to_texts(names)
         pattern = u"|".join(names)
-        return re.compile(pattern, flags=(re.UNICODE | re.LOCALE))
+        return re.compile(pattern, flags=re.UNICODE)
 
     def exclude(self, filename):
         if isinstance(filename, FileLocation):
