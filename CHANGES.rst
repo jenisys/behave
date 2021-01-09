@@ -38,6 +38,8 @@ CLARIFICATION:
 
 FIXED:
 
+* FIXED: Some tests related to python3.9
+* FIXED: active-tag logic if multiple tags with same category exists.
 * issue #772: ScenarioOutline.Examples without table (submitted by: The-QA-Geek)
 * issue #755: Failures with Python 3.8 (submitted by: hroncok)
 * issue #725: Scenario Outline description lines seem to be ignored (submitted by: nizwiz)
@@ -58,6 +60,7 @@ MINOR:
 
 DOCUMENTATION:
 
+* pull  #877: docs: API reference - Capitalizing Step Keywords in example (provided by: Ibrian93)
 * pull  #731: Update links to Django docs (provided by: bittner)
 * pull  #722: DOC remove remaining pythonhosted links (provided by: leszekhanusz)
 * pull  #701: behave/runner.py docstrings (provided by: spitGlued)
