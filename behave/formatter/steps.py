@@ -275,8 +275,8 @@ class StepsCatalogFormatter(StepsDocFormatter):
     step definitions. The primary purpose is to provide help for a test writer.
 
     In order to ease work for non-programmer testers, the technical details of
-    the steps (i.e. function name, source location) are ommited and the
-    steps are shown as they would apprear in a feature file (no noisy '@',
+    the steps (i.e. function name, source location) are omitted and the
+    steps are shown as they would appear in a feature file (no noisy '@',
     or '(', etc.).
 
     Also, the output is sorted by step type (Given, When, Then)
@@ -426,7 +426,7 @@ class StepsUsageFormatter(AbstractStepsFormatter):
     def report_used_step_definitions(self):
         # -- STEP: Used step definitions.
         # ORDERING: Sort step definitions by file location.
-        get_location = lambda x: x[0].location
+        get_location = lambda x: x[0].location  # noqa: E731
         step_definition_items = self.step_usage_database.items()
         step_definition_items = sorted(step_definition_items, key=get_location)
 
@@ -453,7 +453,7 @@ class StepsUsageFormatter(AbstractStepsFormatter):
 
         # -- STEP: Prepare report for unused step definitions.
         # ORDERING: Sort step definitions by file location.
-        get_location = lambda x: x.location
+        get_location = lambda x: x.location  # noqa: E731
         step_definitions = sorted(unused_step_definitions, key=get_location)
         step_texts = [self.describe_step_definition(step_definition)
                       for step_definition in step_definitions]

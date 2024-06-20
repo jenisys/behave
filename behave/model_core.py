@@ -44,7 +44,7 @@ class Status(Enum):
     * executing: Marks the steps during execution (used in a formatter)
 
     .. versionadded:: 1.2.6
-        Superceeds string-based status values.
+        Supersedes string-based status values.
     """
     untested = 0
     skipped = 1
@@ -136,7 +136,6 @@ class FileLocation(object):
       * "{filename}:{line}" or
       * "{filename}" (if line number is not present)
     """
-    __pychecker__ = "missingattrs=line"     # -- Ignore warnings for 'line'.
 
     def __init__(self, filename, line=None):
         if PLATFORM_WIN:
@@ -358,7 +357,11 @@ class TagStatement(BasicStatement):
 
 
 class TagAndStatusStatement(BasicStatement):
-    # final_status = ('passed', 'failed', 'skipped')
+    """Base class for statements with:
+
+    * tags (as: taggable statement)
+    * status (has a result after a test run)
+    """
     final_status = (Status.passed, Status.failed, Status.skipped)
 
     def __init__(self, filename, line, keyword, name, tags, parent=None):
@@ -369,13 +372,29 @@ class TagAndStatusStatement(BasicStatement):
         self.skip_reason = None
         self._cached_status = Status.untested
 
+    @property
+    def effective_tags(self):
+        """Compute effective tags of this entity.
+        This is includes the own tags and the inherited tags from the parents.
+
+        :return: Set of effective tags
+
+        .. versionadded:: 1.2.7
+        """
+        tags = set(self.tags)
+        if self.parent:
+            # -- INHERIT TAGS: From parent(s), recursively
+            inherited_tags = self.parent.effective_tags
+            tags.update(inherited_tags)
+        return tags
+
     def should_run_with_tags(self, tag_expression):
         """Determines if statement should run when the tag expression is used.
 
         :param tag_expression:  Runner/config environment tags to use.
-        :return: True, if examples should run. False, otherwise (skip it).
+        :return: True, if this statement should run. False, otherwise (skip it).
         """
-        return tag_expression.check(self.tags)
+        return tag_expression.check(self.effective_tags)
 
     @property
     def status(self):

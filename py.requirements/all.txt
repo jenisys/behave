@@ -5,11 +5,12 @@
 #    pip install -r <THIS_FILE>
 #
 # SEE ALSO:
-#  * http://www.pip-installer.org/
+#  * https://pip.pypa.io/en/stable/user_guide/
 # ============================================================================
 # ALREADY: -r testing.txt
 # ALREADY: -r docs.txt
 
 -r basic.txt
+-r behave_extensions.txt
 -r develop.txt
--r json.txt
+-r jsonschema.txt

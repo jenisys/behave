@@ -1,13 +1,14 @@
 # -*- coding: UTF-8 -*-
 # pylint: disable=bad-whitespace
 """
-Unit tests for tag-expression parser.
+Unit tests for tag-expression parser for TagExpression v2.
 """
 
 from __future__ import absolute_import, print_function
 from behave.tag_expression.parser import TagExpressionParser, TagExpressionError
-from cucumber_tag_expressions.parser import \
+from cucumber_tag_expressions.parser import (
     Token, Associative, TokenType
+)
 import pytest
 
 
@@ -164,7 +165,8 @@ class TestTagExpressionParser(TagExpressionParserTestBase):
         ("a or not b",  "( a or not ( b ) )"),
         ("not a and b", "( not ( a ) and b )"),
         ("not a or b",  "( not ( a ) or b )"),
-        ("not (a and b) or c", "( not ( ( a and b ) ) or c )"),
+        ("not (a and b) or c", "( not ( a and b ) or c )"),
+        # OLD: ("not (a and b) or c", "( not ( ( a and b ) ) or c )"),
     ])
     def test_parse__ensure_precedence(self, text, expected):
         """Ensures that the operation precedence is parsed correctly."""

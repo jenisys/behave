@@ -1,18 +1,21 @@
 # -*- coding: UTF-8 -*-
+# pylint: disable=invalid-name
 """
 Unit tests for :mod:`behave.api.async_test`.
 """
 
 # -- IMPORTS:
 from __future__ import absolute_import, print_function
-from behave.api.async_step import AsyncContext, use_or_create_async_context
-from behave._stepimport import use_step_import_modules
-from behave.runner import Context, Runner
 import sys
-from mock import Mock
+from unittest.mock import Mock
+from hamcrest import assert_that, close_to
 import pytest
 
-from .testing_support import StopWatch, SimpleStepContainer
+from behave.api.async_step import AsyncContext, use_or_create_async_context
+from behave._stepimport import use_step_import_modules, SimpleStepContainer
+from behave.runner import Context, Runner
+
+from .testing_support import StopWatch
 from .testing_support_async import AsyncStepTheory
 
 
@@ -38,22 +41,31 @@ from .testing_support_async import AsyncStepTheory
 # TEST MARKERS:
 # -----------------------------------------------------------------------------
 # DEPRECATED: @asyncio.coroutine decorator (since: Python >= 3.8)
-_python_version = float("%s.%s" % sys.version_info[:2])
-requires_py34_to_py37 = pytest.mark.skipif(not (3.4 <= _python_version < 3.8),
+PYTHON_3_5 = (3, 5)
+PYTHON_3_8 = (3, 8)
+python_version = sys.version_info[:2]
+requires_py34_to_py37 = pytest.mark.skipif(
+    not (PYTHON_3_5 <= python_version < PYTHON_3_8),
     reason="Supported only for python.versions: 3.4 .. 3.7 (inclusive)")
+
+
+SLEEP_DELTA = 0.050
+if sys.platform.startswith("win"):
+    SLEEP_DELTA = 0.100
 
 
 # -----------------------------------------------------------------------------
 # TESTSUITE:
 # -----------------------------------------------------------------------------
 @requires_py34_to_py37
-class TestAsyncStepDecoratorPy34(object):
+class TestAsyncStepDecoratorPy34:
 
     def test_step_decorator_async_run_until_complete2(self):
         step_container = SimpleStepContainer()
         with use_step_import_modules(step_container):
             # -- STEP-DEFINITIONS EXAMPLE (as MODULE SNIPPET):
             # VARIANT 2: Use @asyncio.coroutine def step_impl()
+            # pylint: disable=import-outside-toplevel, unused-argument
             from behave import step
             from behave.api.async_step import async_run_until_complete
             import asyncio
@@ -64,6 +76,7 @@ class TestAsyncStepDecoratorPy34(object):
             def step_async_step_waits_seconds2(context, duration):
                 yield from asyncio.sleep(duration)
 
+        # pylint: enable=import-outside-toplevel, unused-argument
         # -- USES: async def step_impl(...) as async-step (coroutine)
         AsyncStepTheory.validate(step_async_step_waits_seconds2)
 
@@ -72,16 +85,19 @@ class TestAsyncStepDecoratorPy34(object):
         context = Context(runner=Runner(config={}))
         with StopWatch() as stop_watch:
             step_async_step_waits_seconds2(context, duration=0.2)
-        assert abs(stop_watch.duration - 0.2) <= 0.05
+
+        # DISABLED: assert abs(stop_watch.duration - 0.2) <= 0.05
+        assert_that(stop_watch.duration, close_to(0.2, delta=SLEEP_DELTA))
 
 
-class TestAsyncContext(object):
+class TestAsyncContext:
     @staticmethod
     def make_context():
         return Context(runner=Runner(config={}))
 
     def test_use_or_create_async_context__when_missing(self):
         # -- CASE: AsynContext attribute is created with default_name
+        # pylint: disable=protected-access
         context = self.make_context()
         context._push()
 
@@ -132,7 +148,7 @@ class TestAsyncContext(object):
 
 
 @requires_py34_to_py37
-class TestAsyncStepRunPy34(object):
+class TestAsyncStepRunPy34:
     """Ensure that execution of async-steps works as expected."""
 
     def test_async_step_passes(self):
@@ -141,6 +157,7 @@ class TestAsyncStepRunPy34(object):
         with use_step_import_modules(step_container):
             # -- STEP-DEFINITIONS EXAMPLE (as MODULE SNIPPET):
             # VARIANT 1: Use async def step_impl()
+            # pylint: disable=import-outside-toplevel, unused-argument
             from behave import given, when
             from behave.api.async_step import async_run_until_complete
             import asyncio
@@ -157,7 +174,9 @@ class TestAsyncStepRunPy34(object):
             def when_async_step_passes(context):
                 context.traced_steps.append("async-step2")
 
-        # -- RUN ASYNC-STEP: Verify that async-steps can be execution without problems.
+        # pylint: enable=import-outside-toplevel, unused-argument
+        # -- RUN ASYNC-STEP:
+        # Verify that async-steps can be execution without problems.
         context = Context(runner=Runner(config={}))
         context.traced_steps = []
         given_async_step_passes(context)
@@ -171,6 +190,7 @@ class TestAsyncStepRunPy34(object):
         with use_step_import_modules(step_container):
             # -- STEP-DEFINITIONS EXAMPLE (as MODULE SNIPPET):
             # VARIANT 1: Use async def step_impl()
+            # pylint: disable=import-outside-toplevel, unused-argument
             from behave import when
             from behave.api.async_step import async_run_until_complete
             import asyncio
@@ -181,6 +201,7 @@ class TestAsyncStepRunPy34(object):
             def when_async_step_fails(context):
                 assert False, "XFAIL in async-step"
 
+        # pylint: enable=import-outside-toplevel, unused-argument
         # -- RUN ASYNC-STEP: Verify that AssertionError is detected.
         context = Context(runner=Runner(config={}))
         with pytest.raises(AssertionError):
@@ -192,6 +213,7 @@ class TestAsyncStepRunPy34(object):
         with use_step_import_modules(step_container):
             # -- STEP-DEFINITIONS EXAMPLE (as MODULE SNIPPET):
             # VARIANT 1: Use async def step_impl()
+            # pylint: disable=import-outside-toplevel, unused-argument
             from behave import when
             from behave.api.async_step import async_run_until_complete
             import asyncio
@@ -200,9 +222,11 @@ class TestAsyncStepRunPy34(object):
             @async_run_until_complete
             @asyncio.coroutine
             def when_async_step_raises_exception(context):
+                # pylint: disable=pointless-statement
                 1 / 0   # XFAIL-HERE: Raises ZeroDivisionError
 
-        # -- RUN ASYNC-STEP: Verify that raised exeception is detected.
+        # pylint: enable=import-outside-toplevel, unused-argument
+        # -- RUN ASYNC-STEP: Verify that raised exception is detected.
         context = Context(runner=Runner(config={}))
         with pytest.raises(ZeroDivisionError):
             when_async_step_raises_exception(context)

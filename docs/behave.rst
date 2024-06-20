@@ -15,14 +15,13 @@ Command-Line Arguments
 You may see the same information presented below at any time using ``behave
 -h``.
 
-.. option:: -c, --no-color
+.. option:: -C, --no-color
 
-    Disable the use of ANSI color escapes.
+    Disable colored mode.
 
 .. option:: --color
 
-    Use ANSI color escapes. This is the default behaviour. This switch is
-    used to override a configuration file setting.
+    Use colored mode or not (default: auto).
 
 .. option:: -d, --dry-run
 
@@ -55,6 +54,11 @@ You may see the same information presented below at any time using ``behave
 
     Directory in which to store JUnit reports.
 
+.. option:: -j, --jobs, --parallel
+
+    Number of concurrent jobs to use (default: 1). Only supported by test
+    runners that support parallel execution.
+
 .. option:: -f, --format
 
     Specify a formatter. If none is specified the default formatter is
@@ -65,7 +69,7 @@ You may see the same information presented below at any time using ``behave
     Show a catalog of all available step definitions. SAME AS:
     --format=steps.catalog --dry-run --no-summary -q
 
-.. option:: -k, --no-skipped
+.. option:: --no-skipped
 
     Don't print skipped steps (due to tags).
 
@@ -83,7 +87,7 @@ You may see the same information presented below at any time using ``behave
     Print snippets for unimplemented steps. This is the default behaviour.
     This switch is used to override a configuration file setting.
 
-.. option:: -m, --no-multiline
+.. option:: --no-multiline
 
     Don't print multiline strings and tables under steps.
 
@@ -176,7 +180,11 @@ You may see the same information presented below at any time using ``behave
 
     Alias for --no-snippets --no-source.
 
-.. option:: -s, --no-source
+.. option:: -r, --runner
+
+    Use own runner class, like: "behave.runner:Runner"
+
+.. option:: --no-source
 
     Don't print the file and line of the step definition with the steps.
 
@@ -221,10 +229,6 @@ You may see the same information presented below at any time using ``behave
     formatter, do not capture stdout or logging output and stop at the
     first failure.
 
-.. option:: -x, --expand
-
-    Expand scenario outline tables in output.
-
 .. option:: --lang
 
     Use keywords for a language other than English.
@@ -250,31 +254,29 @@ You may see the same information presented below at any time using ``behave
 Tag Expression
 --------------
 
-Scenarios inherit tags that are declared on the Feature level.
-The simplest TAG_EXPRESSION is simply a tag::
+TAG-EXPRESSIONS selects Features/Rules/Scenarios by using their tags.
+A TAG-EXPRESSION is a boolean expression that references some tags.
 
-    --tags=@dev
+EXAMPLES:
 
-You may even leave off the "@" - behave doesn't mind.
+    --tags=@smoke
+    --tags="not @xfail"
+    --tags="@smoke or @wip"
+    --tags="@smoke and @wip"
+    --tags="(@slow and not @fixme) or @smoke"
+    --tags="not (@fixme or @xfail)"
 
-You can also exclude all features / scenarios that have a tag,
-by using boolean NOT::
+NOTES:
 
-    --tags="not @dev"
+* The tag-prefix "@" is optional.
+* An empty tag-expression is "true" (select-anything).
 
-A tag expression can also use a logical OR::
+TAG-INHERITANCE:
 
-    --tags="@dev or @wip"
-
-The --tags option can be specified several times,
-and this represents logical AND,
-for instance this represents the boolean expression::
-
-    --tags="(@foo or not @bar) and @zap"
-
-You can also exclude several tags::
-
-    --tags="not (@fixme or @buggy)"
+* A Rule inherits the tags of its Feature
+* A Scenario inherits the tags of its Feature or Rule.
+* A Scenario of a ScenarioOutline/ScenarioTemplate inherit tags
+  from this ScenarioOutline/ScenarioTemplate and its Example table.
 
 
 .. _docid.behave.configuration-files:
@@ -282,9 +284,9 @@ You can also exclude several tags::
 Configuration Files
 ===================
 
-Configuration files for *behave* are called either ".behaverc",
-"behave.ini", "setup.cfg" or "tox.ini" (your preference) and are located in
-one of three places:
+Configuration files for *behave* are called either ".behaverc", "behave.ini",
+"setup.cfg", "tox.ini", or "pyproject.toml" (your preference) and are located
+in one of three places:
 
 1. the current working directory (good for per-project settings),
 2. your home directory ($HOME), or
@@ -303,6 +305,16 @@ formatted in the Windows INI style, for example:
     logging_clear_handlers=yes
     logging_filter=-suds
 
+Alternatively, if using "pyproject.toml" instead (note the "tool." prefix):
+
+.. code-block:: toml
+
+    [tool.behave]
+    format = "plain"
+    logging_clear_handlers = true
+    logging_filter = "-suds"
+
+NOTE: toml does not support `'%'` interpolations.
 
 Configuration Parameter Types
 -----------------------------
@@ -317,6 +329,7 @@ The following types are supported (and used):
     The text describes the functionality when the value is true.
     True values are "1", "yes", "true", and "on".
     False values are "0", "no", "false", and "off".
+    TOML: toml only accepts its native `true`
 
 **sequence<text>**
     These fields accept one or more values on new lines, for example a tag
@@ -330,6 +343,7 @@ The following types are supported (and used):
 
         --tags="(@foo or not @bar) and @zap"
 
+    TOML: toml can use arrays natively.
 
 
 Configuration Parameters
@@ -338,10 +352,9 @@ Configuration Parameters
 .. index::
     single: configuration param; color
 
-.. describe:: color : bool
+.. describe:: color : Colored (Enum)
 
-    Use ANSI color escapes. This is the default behaviour. This switch is
-    used to override a configuration file setting.
+    Use colored mode or not (default: auto).
 
 .. index::
     single: configuration param; dry_run
@@ -387,6 +400,14 @@ Configuration Parameters
 .. describe:: junit_directory : text
 
     Directory in which to store JUnit reports.
+
+.. index::
+    single: configuration param; jobs
+
+.. describe:: jobs : positive_number
+
+    Number of concurrent jobs to use (default: 1). Only supported by test
+    runners that support parallel execution.
 
 .. index::
     single: configuration param; default_format
@@ -549,11 +570,28 @@ Configuration Parameters
     Specify default feature paths, used when none are provided.
 
 .. index::
+    single: configuration param; tag_expression_protocol
+
+.. describe:: tag_expression_protocol : TagExpressionProtocol (Enum)
+
+    Specify the tag-expression protocol to use (default: auto_detect).
+    With "v1", only tag-expressions v1 are supported. With "v2", only
+    tag-expressions v2 are supported. With "auto_detect", tag-
+    expressions v1 and v2 are auto-detected.
+
+.. index::
     single: configuration param; quiet
 
 .. describe:: quiet : bool
 
     Alias for --no-snippets --no-source.
+
+.. index::
+    single: configuration param; runner
+
+.. describe:: runner : text
+
+    Use own runner class, like: "behave.runner:Runner"
 
 .. index::
     single: configuration param; show_source
@@ -621,13 +659,6 @@ Configuration Parameters
     Only run scenarios tagged with "wip". Additionally: use the "plain"
     formatter, do not capture stdout or logging output and stop at the
     first failure.
-
-.. index::
-    single: configuration param; expand
-
-.. describe:: expand : bool
-
-    Expand scenario outline tables in output.
 
 .. index::
     single: configuration param; lang

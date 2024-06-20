@@ -29,13 +29,15 @@ Feature: Issue #309 -- behave --lang-list fails on Python3
     When I run "behave --lang-list"
     Then it should pass with:
         """
-        Languages available:
+        AVAILABLE LANGUAGES:
           af: Afrikaans / Afrikaans
           am: հայերեն / Armenian
+          amh: አማርኛ / Amharic
           an: Aragonés / Aragonese
           ar: العربية / Arabic
           ast: asturianu / Asturian
           az: Azərbaycanca / Azerbaijani
+          be: Беларуская / Belarusian
           bg: български / Bulgarian
           bm: Bahasa Melayu / Malay
           bs: Bosanski / Bosnian

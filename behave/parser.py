@@ -41,6 +41,7 @@ Keyword aliases:
 # pylint: enable=line-too-long
 
 from __future__ import absolute_import, with_statement
+import logging
 import re
 import sys
 import six
@@ -177,7 +178,7 @@ class Parser(object):
         self.variant = variant
         self.state = "init"
         self.line = 0
-        self.last_step = None
+        self.last_step_type = None
         self.multiline_start = None
         self.multiline_leading = None
         self.multiline_terminator = None
@@ -206,7 +207,7 @@ class Parser(object):
 
         self.state = "init"
         self.line = 0
-        self.last_step = None
+        self.last_step_type = None
         self.multiline_start = None
         self.multiline_leading = None
         self.multiline_terminator = None
@@ -228,7 +229,7 @@ class Parser(object):
 
         for line in text.split("\n"):
             self.line += 1
-            if not line.strip() and self.state != "multiline":
+            if not line.strip() and self.state != "multiline_text":
                 # -- SKIP EMPTY LINES, except in multiline string args.
                 continue
             self.action(line)
@@ -353,7 +354,7 @@ class Parser(object):
 
             Oracle, oracle, ... what went wrong?
 
-        :param line:  Text line where parse failure occured (as string).
+        :param line:  Text line where parse failure occurred (as string).
         :return: Reason (as string) if an explanation is found.
                  Otherwise, empty string or None.
         """
@@ -380,7 +381,7 @@ class Parser(object):
         return None
 
     def action(self, line):
-        if line.strip().startswith("#") and self.state != "multiline":
+        if line.strip().startswith("#") and self.state != "multiline_text":
             if self.state != "init" or self.tags or self.variant != "feature":
                 return
 
@@ -545,6 +546,7 @@ class Parser(object):
         * first step of Scenario/ScenarioOutline
         * next Scenario/ScenarioOutline
         """
+        self.last_step_type = None
         line = line.strip()
         step = self.parse_step(line)
         if step:
@@ -582,8 +584,24 @@ class Parser(object):
         # pylint: disable=R0911
         #   R0911   Too many return statements (8/6)
         stripped = line.lstrip()
+        # if self.statement.steps:
+        #     # -- ENSURE: Multi-line text follows a step.
+        #     if stripped.startswith('"""') or stripped.startswith("'''"):
+        #         # -- CASE: Multi-line text (docstring) after a step detected.
+        #         self.state = "multiline_text"
+        #         self.multiline_start = self.line
+        #         self.multiline_terminator = stripped[:3]
+        #         self.multiline_leading = line.index(stripped[0])
+        #         return True
+
         if stripped.startswith('"""') or stripped.startswith("'''"):
-            self.state = "multiline"
+            # -- CASE: Multi-line text (docstring) after a step detected.
+            # REQUIRE: Multi-line text follows a step.
+            if not self.statement.steps:
+                raise ParserError("Multi-line text before any step",
+                                  self.line, self.filename)
+
+            self.state = "multiline_text"
             self.multiline_start = self.line
             self.multiline_terminator = stripped[:3]
             self.multiline_leading = line.index(stripped[0])
@@ -600,25 +618,47 @@ class Parser(object):
             return True
 
         if line.startswith("|"):
-            assert self.statement.steps, "TABLE-START without step detected."
+            # -- CASE: TABLE-START detected for data-table of a step
+            # OLD: assert self.statement.steps, "TABLE-START without step detected"
+            if not self.statement.steps:
+                raise ParserError("TABLE-START without step detected",
+                                  self.line, self.filename)
             self.state = "table"
             return self.action_table(line)
 
         return False
 
-    def action_multiline(self, line):
+    def action_multiline_text(self, line):
+        """Parse remaining multi-line/docstring text below a step
+        after the triple-quotes were detected:
+
+        * triple-double-quotes or
+        * triple-single-quotes
+
+        Leading and trailing triple-quotes must be the same.
+
+        :param line:  Parsed line, as part of a multi-line text (as string).
+        """
         if line.strip().startswith(self.multiline_terminator):
-            step = self.statement.steps[-1]
-            step.text = model.Text(u"\n".join(self.lines), u"text/plain",
-                                   self.multiline_start)
-            if step.name.endswith(":"):
-                step.name = step.name[:-1]
+            # -- CASE: Handle the end of a multi-line text part.
+            # Store the multi-line text in the step object (and continue).
+            this_step = self.statement.steps[-1]
+            text = u"\n".join(self.lines)
+            this_step.text = model.Text(text, u"text/plain", self.multiline_start)
+            if this_step.name.endswith(":"):
+                this_step.name = this_step.name[:-1]
+
+            # -- RESET INTERNALS: For next step
             self.lines = []
             self.multiline_terminator = None
-            self.state = "steps"
+            self.state = "steps"    # NEXT-STATE: Accept additional step(s).
             return True
 
-        self.lines.append(line[self.multiline_leading:])
+        # -- SPECIAL CASE: Strip trailing whitespace (whitespace normalization).
+        # HINT: Required for Windows line-endings, like "\r\n", etc.
+        text_line = line[self.multiline_leading:].rstrip()
+        self.lines.append(text_line)
+
         # -- BETTER DIAGNOSTICS: May remove non-whitespace in execute_steps()
         removed_line_prefix = line[:self.multiline_leading]
         if removed_line_prefix.strip():
@@ -629,31 +669,46 @@ class Parser(object):
         return True
 
     def action_table(self, line):
-        line = line.strip()
+        """Parse a table, with pipe-separated columns:
 
+        * Data table of a step (after the step line)
+        * Examples table of a ScenarioOutline
+        """
+        line = line.strip()
         if not line.startswith("|"):
+            # -- CASE: End-of-table detected
             if self.examples:
+                # -- CASE: Examples table of a ScenarioOutline
                 self.examples.table = self.table
                 self.examples = None
             else:
+                # -- CASE: Data table of a step
                 step = self.statement.steps[-1]
                 step.table = self.table
                 if step.name.endswith(":"):
                     step.name = step.name[:-1]
+
+            # -- RESET: Parameters for parsing the next step(s).
             self.table = None
             self.state = "steps"
             return self.action_steps(line)
 
+        if not re.match(r"^(|.+)\|$", line):
+            logger = logging.getLogger("behave")
+            logger.warning(u"Malformed table row at %s: line %i",
+                           self.feature.filename, self.line)
+
         # -- SUPPORT: Escaped-pipe(s) in Gherkin cell values.
-        #    Search for pipe(s) that are not preceeded with an escape char.
+        #    Search for pipe(s) that are not preceded with an escape char.
         cells = [cell.replace("\\|", "|").strip()
                  for cell in re.split(r"(?<!\\)\|", line[1:-1])]
         if self.table is None:
+            # -- CASE: First row of the table
             self.table = model.Table(cells, self.line)
         else:
+            # -- CASE: Following rows of the table
             if len(cells) != len(self.table.headings):
                 raise ParserError(u"Malformed table", self.line, self.filename)
-                # MAYBE: self.filename)
             self.table.add_row(cells, self.line)
         return True
 
@@ -683,7 +738,7 @@ class Parser(object):
 
         for line in text.split("\n"):
             self.line += 1
-            if not line.strip() and self.state != "multiline":
+            if not line.strip() and self.state != "multiline_text":
                 # -- SKIP EMPTY LINES, except in multiline string args.
                 continue
             self.action(line)
@@ -727,23 +782,59 @@ class Parser(object):
                         line.lower().startswith(kw.lower())):
                     # -- CASE: Line does not start w/ a step-keyword.
                     continue
+
                 # -- HINT: Trailing SPACE is used for most keywords.
                 # BUT: Keywords in some languages (like Chinese, Japanese, ...)
                 #      do not need a whitespace as word separator.
                 step_text_after_keyword = line[len(kw):].strip()
-                if step_type in ("and", "but"):
-                    if not self.last_step:
-                        raise ParserError(u"No previous step",
-                                          self.line, self.filename)
-                    step_type = self.last_step
+                if kw.startswith("*") and self.last_step_type:
+                    # -- CASE: Generic steps and Given/When/Then steps are mixed.
+                    # HINT: Inherit step type from last step.
+                    step_type = self.last_step_type
+                elif step_type in ("and", "but"):
+                    if not self.last_step_type:
+                        # -- BEST-EFFORT: Try to use last background.step.
+                        self.last_step_type = self._select_last_background_step_type()
+                        if not self.last_step_type:
+                            msg = u"{step_type}-STEP REQUIRES: An previous Given/When/Then step."
+                            raise ParserError(msg.format(step_type=step_type.upper()),
+                                              self.line, self.filename)
+
+                    assert self.last_step_type is not None
+                    step_type = self.last_step_type
+                    assert step_type is not None
                 else:
-                    self.last_step = step_type
+                    self.last_step_type = step_type
 
                 keyword = kw.rstrip()  # HINT: Strip optional trailing SPACE.
                 step = model.Step(self.filename, self.line,
                                   keyword, step_type, step_text_after_keyword)
                 return step
         return None
+
+    def _select_last_background_step_type(self):
+        # -- CASES:
+        # * CASE 1: With background.steps/background.inherited_steps
+        #   - Feature with Background and background.steps
+        #   - Rule with Background and background.steps
+        #   - Rule with Background w/o background.steps but w/ inherited steps
+        #
+        # * CASE 2: No background.steps
+        #   - Feature without Background
+        #   - Feature with Background but w/o background.steps
+        #   - Rule without Background
+        #   - Rule with Background w/o background.steps and w/o inherited steps
+        last_background_step_type = None
+        if self.scenario_container and self.scenario_container.background:
+            # -- HINT: Consider background.steps and inherited steps.
+            this_background = self.scenario_container.background
+            this_background_steps = (this_background.steps or
+                                     this_background.inherited_steps)
+            if this_background_steps:
+                # -- HINT: Feature/Rule may have background w/o steps.
+                last_background_step = this_background_steps[-1]
+                last_background_step_type = last_background_step.step_type
+        return last_background_step_type
 
     def parse_steps(self, text, filename=None):
         """Parse support for execute_steps() functionality that
@@ -765,7 +856,7 @@ class Parser(object):
 
         for line in text.split("\n"):
             self.line += 1
-            if not line.strip() and self.state != "multiline":
+            if not line.strip() and self.state != "multiline_text":
                 # -- SKIP EMPTY LINES, except in multiline string args.
                 continue
             self.action(line)

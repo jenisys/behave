@@ -10,6 +10,8 @@ Summary:
 * `Select-by-location for Scenario Containers`_ (Feature, Rule, ScenarioOutline)
 * `Support for emojis in feature files and steps`_
 * `Improve Active-Tags Logic`_
+* `Active-Tags: Use ValueObject for better Comparisons`_
+* `Detect bad step definitions`_
 
 .. _`Example Mapping`: https://cucumber.io/blog/example-mapping-introduction/
 .. _`Example Mapping Webinar`: https://cucumber.io/blog/example-mapping-webinar/
@@ -35,11 +37,16 @@ A Rule (or: business rule) allows to group multiple Scenario(s)/Example(s)::
         Scenario*           #< CARDINALITY: 0..N (many)
         ScenarioOutline*    #< CARDINALITY: 0..N (many)
 
-Gherkin v6 keyword aliases::
+Gherkin v6 keyword aliases:
 
-    | Concept          | Preferred Keyword | Alias(es)          |
-    | Scenario         | Example           | Scenario           |
-    | Scenario Outline | Scenario Outline  | Scenario Template  |
+==================  =================== ======================
+Concept             Preferred Keyword   Alias(es)
+==================  =================== ======================
+Scenario            Example             Scenario
+Scenario Outline    Scenario Outline    Scenario Template
+Examples            Examples            Scenarios
+==================  =================== ======================
+
 
 Example:
 
@@ -197,3 +204,140 @@ EXAMPLE:
         HINT 1: Only executed with browser: Firefox
         HINT 2: Only executed on OS: Linux and Darwin (macOS)
         ...
+
+
+Active-Tags: Use ValueObject for better Comparisons
+-------------------------------------------------------------------------------
+
+The current mechanism of active-tags only supports the ``equals / equal-to`` comparison
+mechanism to determine if the ``tag.value`` matches the ``current.value``, like::
+
+    # -- SCHEMA: "@use.with_{category}={value}" or "@not.with_{category}={value}"
+    @use.with_browser=Safari    # HINT: tag.value = "Safari"
+
+    ACTIVE TAG MATCHES, if: current.value == tag.value  (for string values)
+
+The ``equals`` comparison method is sufficient for many situations.
+But in some situations, you want to use other comparison methods.
+The ``behave.tag_matcher.ValueObject`` class was added to allow
+the user to provide an own comparison method (and type conversion support).
+
+**EXAMPLE 1:**
+
+.. code:: gherkin
+
+    Feature: Active-Tag Example 1 with ValueObject
+
+      @use.with_temperature.min_value=15
+      Scenario: Only run if temperature >= 15 degrees Celcius
+        ...
+
+.. code:: python
+
+    # -- FILE: features/environment.py
+    import operator
+    from behave.tag_matcher import ActiveTagMatcher, ValueObject
+    from my_system.sensors import Sensors
+
+    # -- SIMPLIFIED: Better use behave.tag_matcher.NumberValueObject
+    # CTOR: ValueObject(value, compare=operator.eq)
+    # HINT: Parameter "value" can be a getter-function (w/o args).
+    class NumberValueObject(ValueObject):
+        def matches(self, tag_value):
+            tag_number = int(tag_value)
+            return self.compare(self.value, tag_number)
+
+    current_temperature = Sensors().get_temperature()
+    active_tag_value_provider = {
+        # -- COMPARISON:
+        # temperature.value:     current.value == tag.value  -- DEFAULT: equals  (eq)
+        # temperature.min_value: current.value >= tag.value  -- greater_or_equal (ge)
+        "temperature.value":     NumberValueObject(current_temperature),
+        "temperature.min_value": NumberValueObject(current_temperature, operator.ge),
+    }
+    active_tag_matcher = ActiveTagMatcher(active_tag_value_provider)
+
+    # -- HOOKS SETUP FOR ACTIVE-TAGS: ... (omitted here)
+
+
+**EXAMPLE 2:**
+
+A slightly more complex situation arises, if you need to constrain the
+execution of an scenario to a temperature range, like:
+
+.. code:: gherkin
+
+    Feature: Active-Tag Example 2 with Min/Max Value Range
+
+      @use.with_temperature.min_value=10
+      @use.with_temperature.max_value=70
+      Scenario: Only run if temperature is between 10 and 70 degrees Celcius
+        ...
+
+.. code:: python
+
+    # -- FILE: features/environment.py
+    ...
+    current_temperature = Sensors().get_temperature()
+    active_tag_value_provider = {
+        # -- COMPARISON:
+        # temperature.min_value:  current.value >= tag.value
+        # temperature.max_value:  current.value <= tag.value
+        "temperature.min_value": NumberValueObject(current_temperature, operator.ge),
+        "temperature.max_value": NumberValueObject(current_temperature, operator.le),
+    }
+    ...
+
+**EXAMPLE 3:**
+
+.. code:: gherkin
+
+    Feature: Active-Tag Example 3 with Contains/Contained-in Comparison
+
+      @use.with_supported_payment_method=VISA
+      Scenario: Only run if VISA is one of the supported payment methods
+        ...
+
+      # OR: @use.with_supported_payment_methods.contains_value=VISA
+
+.. code:: python
+
+    # -- FILE: features/environment.py
+    # NORMALLY:
+    #  from my_system.payment import get_supported_payment_methods
+    #  payment_methods = get_supported_payment_methods()
+    ...
+    payment_methods = ["VISA", "MasterCard", "paycheck"]
+    active_tag_value_provider = {
+        # -- COMPARISON:
+        # supported_payment_method: current.value contains tag.value
+        "supported_payment_method": ValueObject(payment_methods, operator.contains),
+    }
+    ...
+
+
+Detect Bad Step Definitions
+-------------------------------------------------------------------------------
+
+The **regular expression** (:mod:`re`) module in Python has increased the checks
+when bad regular expression patterns are used. Since `Python >= 3.11`,
+an :class:`re.error` exception may be raised on some regular expressions.
+The exception is raised when the bad regular expression is compiled
+(on :func:`re.compile()`).
+
+``behave`` has added the following support:
+
+* Detects a bad step-definition when they are added to the step-registry.
+* Reports a bad step-definition and their exception during this step.
+* bad step-definitions are not registered in the step-registry.
+* A bad step-definition is like an UNDEFINED step-definition.
+* A :class:`~behave.formatter.bad_steps.BadStepsFormatter` formatter was added that shows any BAD STEP DEFINITIONS
+
+
+.. note:: More Information on BAD STEP-DEFINITIONS:
+
+    * `features/formatter.bad_steps.feature`_
+    * `features/runner.bad_steps.feature`_
+
+.. _`features/formatter.bad_steps.feature`: https://github.com/behave/behave/blob/main/features/formatter.bad_steps.feature
+.. _`features/runner.bad_steps.feature`: https://github.com/behave/behave/blob/main/features/runner.bad_steps.feature

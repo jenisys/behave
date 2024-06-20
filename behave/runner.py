@@ -4,7 +4,6 @@ This module provides Runner class to run behave feature files (or model elements
 """
 
 from __future__ import absolute_import, print_function, with_statement
-
 import contextlib
 import os.path
 import sys
@@ -13,6 +12,7 @@ import weakref
 
 import six
 
+from behave.api.runner import ITestRunner
 from behave._types import ExceptionUtil
 from behave.capture import CaptureController
 from behave.exception import ConfigError
@@ -122,23 +122,13 @@ class Context(object):
       :class:`~behave.model.Row` that is active for the current scenario. It is
       present mostly for debugging, but may be useful otherwise.
 
-    .. attribute:: log_capture
+    .. attribute:: captured
 
-      If logging capture is enabled then this attribute contains the captured
-      logging as an instance of :class:`~behave.log_capture.LoggingCapture`.
-      It is not present if logging is not being captured.
+        If any output capture is enabled, provides access to a
+        :class:`~behave.capture.Captured` object that contains a snapshot
+        of all captured data (stdout/stderr/log).
 
-    .. attribute:: stdout_capture
-
-      If stdout capture is enabled then this attribute contains the captured
-      output as a StringIO instance. It is not present if stdout is not being
-      captured.
-
-    .. attribute:: stderr_capture
-
-      If stderr capture is enabled then this attribute contains the captured
-      output as a StringIO instance. It is not present if stderr is not being
-      captured.
+        .. versionadded:: 1.3.0
 
     A :class:`behave.runner.ContextMaskWarning` warning will be raised if user
     code attempts to overwrite one of these variables, or if *behave* itself
@@ -164,7 +154,7 @@ class Context(object):
     def __init__(self, runner):
         self._runner = weakref.proxy(runner)
         self._config = runner.config
-        d = self._root = {
+        root_data = self._root = {
             "aborted": False,
             "failed": False,
             "config": self._config,
@@ -173,23 +163,71 @@ class Context(object):
             "@cleanups": [],    # -- REQUIRED-BY: before_all() hook
             "@layer": "testrun",
         }
-        self._stack = [d]
+        self._stack = [root_data]
         self._record = {}
         self._origin = {}
         self._mode = ContextMode.BEHAVE
 
         # -- MODEL ENTITY REFERENCES/SUPPORT:
-        self.feature = None
         # DISABLED: self.rule = None
         # DISABLED: self.scenario = None
+        self.feature = None
         self.text = None
         self.table = None
 
         # -- RUNTIME SUPPORT:
-        self.stdout_capture = None
-        self.stderr_capture = None
-        self.log_capture = None
+        # DISABLED: self.stdout_capture = None
+        # DISABLED: self.stderr_capture = None
+        # DISABLED: self.log_capture = None
         self.fail_on_cleanup_errors = self.FAIL_ON_CLEANUP_ERRORS
+
+    def abort(self, reason=None):
+        """Abort the test run.
+
+        This sets the :attr:`aborted` attribute to true.
+        Any test runner evaluates this attribute to abort a test run.
+
+        .. versionadded:: 1.2.7
+        """
+        self._set_root_attribute("aborted", True)
+
+    def use_or_assign_param(self, name, value):
+        """Use an existing context parameter (aka: attribute) or
+        assign a value to new context parameter (if it does not exist yet).
+
+        :param name:   Context parameter name (as string)
+        :param value:  Parameter value for new parameter.
+        :return: Existing or newly created parameter.
+
+        .. versionadded:: 1.2.7
+        """
+        if name not in self:
+            # -- CASE: New, missing param -- Assign parameter-value.
+            setattr(self, name, value)
+            return value
+        # -- OTHERWISE: Use existing param
+        return getattr(self, name, None)
+
+
+    def use_or_create_param(self, name, factory_func, *args, **kwargs):
+        """Use an existing context parameter (aka: attribute) or
+        create a new parameter if it does not exist yet.
+
+        :param name:   Context parameter name (as string)
+        :param factory_func: Factory function, used if parameter is created.
+        :param args: Positional args for ``factory_func()`` on create.
+        :param kwargs: Named args for ``factory_func()`` on create.
+        :return: Existing or newly created parameter.
+
+        .. versionadded:: 1.2.7
+        """
+        if name not in self:
+            # -- CASE: New, missing param -- Create it.
+            param_value = factory_func(*args, **kwargs)
+            setattr(self, name, param_value)
+            return param_value
+        # -- OTHERWISE: Use existing param
+        return getattr(self, name, None)
 
     @staticmethod
     def ignore_cleanup_error(context, cleanup_func, exception):
@@ -461,7 +499,7 @@ class Context(object):
         # MAYBE:
         assert callable(cleanup_func), "REQUIRES: callable(cleanup_func)"
         assert self._stack
-        layer = kwargs.pop("layer", None)
+        layer_name = kwargs.pop("layer", None)
         if args or kwargs:
             def internal_cleanup_func():
                 cleanup_func(*args, **kwargs)
@@ -469,11 +507,15 @@ class Context(object):
             internal_cleanup_func = cleanup_func
 
         current_frame = self._stack[0]
-        if layer:
-            current_frame = self._select_stack_frame_by_layer(layer)
+        if layer_name:
+            current_frame = self._select_stack_frame_by_layer(layer_name)
         if cleanup_func not in current_frame["@cleanups"]:
             # -- AVOID DUPLICATES:
             current_frame["@cleanups"].append(internal_cleanup_func)
+
+    @property
+    def captured(self):
+        return self._runner.captured
 
     def attach(self, mime_type, data):
         """Embeds data (e.g. a screenshot) in reports for all
@@ -552,8 +594,7 @@ def path_getrootdir(path):
 
 
 class ModelRunner(object):
-    """
-    Test runner for a behave model (features).
+    """Test runner for a behave model (features).
     Provides the core functionality of a test runner and
     the functional API needed by model elements.
 
@@ -562,6 +603,14 @@ class ModelRunner(object):
           This is set to true when the user aborts a test run
           (:exc:`KeyboardInterrupt` exception). Initially: False.
           Stored as derived attribute in :attr:`Context.aborted`.
+
+    .. attribute:: captured
+
+        If any output capture is enabled, provides access to a
+        :class:`~behave.capture.Captured` object that contains a snapshot
+        of all captured data (stdout/stderr/log).
+
+        .. versionadded:: 1.3.0
     """
     # pylint: disable=too-many-instance-attributes
 
@@ -570,7 +619,7 @@ class ModelRunner(object):
         self.features = features or []
         self.hooks = {}
         self.formatters = []
-        self.undefined_steps = []
+        self._undefined_steps = []
         self.step_registry = step_registry
         self.capture_controller = CaptureController(config)
 
@@ -578,21 +627,39 @@ class ModelRunner(object):
         self.feature = None
         self.hook_failures = 0
 
-    # @property
-    def _get_aborted(self):
-        value = False
-        if self.context:
-            value = self.context.aborted
-        return value
+    @property
+    def undefined_steps(self):
+        return self._undefined_steps
 
-    # @aborted.setter
-    def _set_aborted(self, value):
+    @property
+    def aborted(self):
+        """Indicates that test run is aborted by the user or system."""
+        if self.context:
+            return self.context.aborted
+        # -- OTHERWISE
+        return False
+
+    @aborted.setter
+    def aborted(self, value):
+        """Mark the test run as aborted."""
         # pylint: disable=protected-access
         assert self.context, "REQUIRE: context, but context=%r" % self.context
-        self.context._set_root_attribute("aborted", bool(value))
+        if self.context:
+            self.context._set_root_attribute("aborted", bool(value))
 
-    aborted = property(_get_aborted, _set_aborted,
-                       doc="Indicates that test run is aborted by the user.")
+    # DISABLED: aborted = property(_get_aborted, _set_aborted, doc="...")
+
+    def abort(self, reason=None):
+        """Abort the test run.
+
+        .. versionadded:: 1.2.7
+        """
+        if self.context is None:
+            return  # -- GRACEFULLY IGNORED.
+
+        # -- NORMAL CASE:
+        # SIMILAR TO: self.aborted = True
+        self.context.abort(reason=reason)
 
     def run_hook(self, name, context, *args):
         if not self.config.dry_run and (name in self.hooks):
@@ -600,7 +667,7 @@ class ModelRunner(object):
                 with context.use_with_user_mode():
                     self.hooks[name](context, *args)
             # except KeyboardInterrupt:
-            #     self.aborted = True
+            #     self.abort(reason="KeyboardInterrupt")
             #     if name not in ("before_all", "after_all"):
             #         raise
             except Exception as e:  # pylint: disable=broad-except
@@ -622,7 +689,7 @@ class ModelRunner(object):
                     statement = getattr(context, "scenario", context.feature)
                 elif "all" in name:
                     # -- ABORT EXECUTION: For before_all/after_all
-                    self.aborted = True
+                    self.abort(reason="HOOK-ERROR in hook=%s" % name)
                     statement = None
                 else:
                     # -- CASE: feature, scenario, step
@@ -653,6 +720,13 @@ class ModelRunner(object):
 
     def teardown_capture(self):
         self.capture_controller.teardown_capture()
+
+    @property
+    def captured(self):
+        """Return the current state of the captured output/logging
+        (as captured object).
+        """
+        return self.capture_controller.captured
 
     def run_model(self, features=None):
         # pylint: disable=too-many-branches
@@ -686,7 +760,7 @@ class ModelRunner(object):
                             # -- FAIL-EARLY: After first failure.
                             run_feature = False
                 except KeyboardInterrupt:
-                    self.aborted = True
+                    self.abort(reason="KeyboardInterrupt")
                     failed_count += 1
                     run_feature = False
 
@@ -711,6 +785,8 @@ class ModelRunner(object):
         for reporter in self.config.reporters:
             reporter.end()
 
+        # -- MAYBE: BAD STEP-DEFINITIONS: Unused BAD STEPS should not cause FAILURE.
+        # bad_step_definitions = self.step_registry.error_handler.bad_step_definitions
         failed = ((failed_count > 0) or self.aborted or (self.hook_failures > 0)
                   or (len(self.undefined_steps) > undefined_steps_initial_size)
                   or cleanups_failed)
@@ -726,19 +802,18 @@ class ModelRunner(object):
 
 
 class Runner(ModelRunner):
-    """
-    Standard test runner for behave:
+    """Standard test runner for behave:
 
       * setup paths
       * loads environment hooks
       * loads step definitions
       * select feature files, parses them and creates model (elements)
     """
+
     def __init__(self, config):
         super(Runner, self).__init__(config)
         self.path_manager = PathManager()
         self.base_dir = None
-
 
     def setup_paths(self):
         # pylint: disable=too-many-branches, too-many-statements
@@ -878,3 +953,10 @@ class Runner(ModelRunner):
         stream_openers = self.config.outputs
         self.formatters = make_formatters(self.config, stream_openers)
         return self.run_model()
+
+
+# -----------------------------------------------------------------------------
+# REGISTER RUNNER-CLASSES:
+# -----------------------------------------------------------------------------
+ITestRunner.register(ModelRunner)
+ITestRunner.register(Runner)

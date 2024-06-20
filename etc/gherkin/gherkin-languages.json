@@ -26,7 +26,7 @@
     "name": "Afrikaans",
     "native": "Afrikaans",
     "rule": [
-      "Rule"
+      "Regel"
     ],
     "scenario": [
       "Voorbeeld",
@@ -278,6 +278,55 @@
       "Nə vaxt ki "
     ]
   },
+    "be": {
+    "and": [
+      "* ",
+      "I ",
+      "Ды ",
+      "Таксама "
+    ],
+    "background": [
+      "Кантэкст"
+    ],
+    "but": [
+      "* ",
+      "Але ",
+      "Інакш "
+    ],
+    "examples": [
+      "Прыклады"
+    ],
+    "feature": [
+      "Функцыянальнасць",
+      "Фіча"
+    ],
+    "given": [
+      "* ",
+      "Няхай ",
+      "Дадзена "
+    ],
+    "name": "Belarusian",
+    "native": "Беларуская",
+    "rule": [
+      "Правілы"
+    ],
+    "scenario": [
+      "Сцэнарый",
+      "Cцэнар"
+    ],
+    "scenarioOutline": [
+      "Шаблон сцэнарыя",
+      "Узор сцэнара"
+    ],
+    "then": [
+      "* ",
+      "Тады "
+    ],
+    "when": [
+      "* ",
+      "Калі "
+    ]
+  },
   "bg": {
     "and": [
       "* ",
@@ -303,7 +352,7 @@
     "name": "Bulgarian",
     "native": "български",
     "rule": [
-      "Rule"
+      "Правило"
     ],
     "scenario": [
       "Пример",
@@ -494,7 +543,7 @@
     "name": "Czech",
     "native": "Česky",
     "rule": [
-      "Rule"
+      "Pravidlo"
     ],
     "scenario": [
       "Příklad",
@@ -967,9 +1016,12 @@
     ],
     "when": [
       "* ",
-      "Tha ",
-      "Þa ",
-      "Ða "
+      "Bæþsealf ",
+      "Bæþsealfa ",
+      "Bæþsealfe ",
+      "Ciricæw ",
+      "Ciricæwe ",
+      "Ciricæwa "
     ]
   },
   "en-pirate": {
@@ -1012,6 +1064,46 @@
     "when": [
       "* ",
       "Blimey! "
+    ]
+  },
+    "en-tx": {
+    "and": [
+      "Come hell or high water "
+    ],
+    "background": [
+      "Lemme tell y'all a story"
+    ],
+    "but": [
+      "Well now hold on, I'll you what "
+    ],
+    "examples": [
+      "Now that's a story longer than a cattle drive in July"
+    ],
+    "feature": [
+      "This ain’t my first rodeo",
+      "All gussied up"
+    ],
+    "given": [
+      "Fixin' to ",
+      "All git out "
+    ],
+    "name": "Texas",
+    "native": "Texas",
+    "rule": [
+      "Rule "
+    ],
+    "scenario": [
+      "All hat and no cattle"
+    ],
+    "scenarioOutline": [
+      "Serious as a snake bite",
+      "Busy as a hound in flea season"
+    ],
+    "then": [
+      "There’s no tree but bears some fruit "
+    ],
+    "when": [
+      "Quick out of the chute "
     ]
   },
   "eo": {
@@ -1078,7 +1170,9 @@
       "Ejemplos"
     ],
     "feature": [
-      "Característica"
+      "Característica",
+      "Necesidad del negocio",
+      "Requisito"
     ],
     "given": [
       "* ",
@@ -1090,7 +1184,8 @@
     "name": "Spanish",
     "native": "español",
     "rule": [
-      "Regla"
+      "Regla",
+      "Regla de negocio"
     ],
     "scenario": [
       "Ejemplo",
@@ -1520,7 +1615,7 @@
     "name": "Hindi",
     "native": "हिंदी",
     "rule": [
-      "Rule"
+      "नियम"
     ],
     "scenario": [
       "परिदृश्य"
@@ -1672,7 +1767,7 @@
     "name": "Hungarian",
     "native": "magyar",
     "rule": [
-      "Rule"
+      "Szabály"
     ],
     "scenario": [
       "Példa",
@@ -1804,7 +1899,9 @@
       "Esempi"
     ],
     "feature": [
-      "Funzionalità"
+      "Funzionalità",
+      "Esigenza di Business",
+      "Abilità"
     ],
     "given": [
       "* ",
@@ -1816,7 +1913,7 @@
     "name": "Italian",
     "native": "italiano",
     "rule": [
-      "Rule"
+      "Regola"
     ],
     "scenario": [
       "Esempio",
@@ -1837,6 +1934,7 @@
   "ja": {
     "and": [
       "* ",
+      "且つ",
       "かつ"
     ],
     "background": [
@@ -1844,6 +1942,7 @@
     ],
     "but": [
       "* ",
+      "然し",
       "しかし",
       "但し",
       "ただし"
@@ -1863,7 +1962,7 @@
     "name": "Japanese",
     "native": "日本語",
     "rule": [
-      "Rule"
+      "ルール"
     ],
     "scenario": [
       "シナリオ"
@@ -1934,44 +2033,57 @@
   "ka": {
     "and": [
       "* ",
-      "და"
+      "და ",
+      "ასევე "
     ],
     "background": [
       "კონტექსტი"
     ],
     "but": [
       "* ",
-      "მაგ­რამ"
+      "მაგრამ ",
+      "თუმცა "
     ],
     "examples": [
       "მაგალითები"
     ],
     "feature": [
-      "თვისება"
+      "თვისება",
+      "მოთხოვნა"
     ],
     "given": [
       "* ",
-      "მოცემული"
+      "მოცემული ",
+      "მოცემულია ",
+      "ვთქვათ "
     ],
     "name": "Georgian",
-    "native": "ქართველი",
+    "native": "ქართული",
     "rule": [
-      "Rule"
+      "წესი"
     ],
     "scenario": [
       "მაგალითად",
-      "სცენარის"
+      "მაგალითი",
+      "მაგ",
+      "სცენარი"
     ],
     "scenarioOutline": [
-      "სცენარის ნიმუში"
+      "სცენარის ნიმუში",
+      "სცენარის შაბლონი",
+      "ნიმუში",
+      "შაბლონი"
     ],
     "then": [
       "* ",
-      "მაშინ"
+      "მაშინ "
     ],
     "when": [
       "* ",
-      "როდესაც"
+      "როდესაც ",
+      "როცა ",
+      "როგორც კი ",
+      "თუ "
     ]
   },
   "kn": {
@@ -2350,7 +2462,7 @@
     "and": [
       "* ",
       "र ",
-      "अनी "
+      "अनि "
     ],
     "background": [
       "पृष्ठभूमी"
@@ -2561,7 +2673,8 @@
     "name": "Polish",
     "native": "polski",
     "rule": [
-      "Rule"
+      "Zasada",
+      "Reguła"
     ],
     "scenario": [
       "Przykład",
@@ -2718,7 +2831,8 @@
       "Функция",
       "Функциональность",
       "Функционал",
-      "Свойство"
+      "Свойство",
+      "Фича"
     ],
     "given": [
       "* ",
@@ -2736,7 +2850,8 @@
       "Сценарий"
     ],
     "scenarioOutline": [
-      "Структура сценария"
+      "Структура сценария",
+      "Шаблон сценария"
     ],
     "then": [
       "* ",
@@ -2896,7 +3011,7 @@
     "name": "Serbian",
     "native": "Српски",
     "rule": [
-      "Rule"
+      "Правило"
     ],
     "scenario": [
       "Пример",
@@ -2951,7 +3066,7 @@
     "name": "Serbian (Latin)",
     "native": "Srpski (Latinica)",
     "rule": [
-      "Rule"
+      "Pravilo"
     ],
     "scenario": [
       "Scenario",
@@ -3229,7 +3344,7 @@
     "name": "Turkish",
     "native": "Türkçe",
     "rule": [
-      "Rule"
+      "Kural"
     ],
     "scenario": [
       "Örnek",
@@ -3412,7 +3527,7 @@
     ],
     "given": [
       "* ",
-      "Агар "
+      "Belgilangan "
     ],
     "name": "Uzbek",
     "native": "Узбекча",
@@ -3508,7 +3623,8 @@
     "name": "Chinese simplified",
     "native": "简体中文",
     "rule": [
-      "Rule"
+      "Rule",
+      "规则"
     ],
     "scenario": [
       "场景",
@@ -3620,6 +3736,55 @@
     "when": [
       "* ",
       "जेव्हा "
+    ]
+  },
+  "amh": {
+    "and": [
+      "* ",
+      "እና "
+    ],
+    "background": [
+      "ቅድመ ሁኔታ",
+      "መነሻ",
+      "መነሻ ሀሳብ"
+    ],
+    "but": [
+      "* ",
+      "ግን "
+    ],
+    "examples": [
+      "ምሳሌዎች",
+      "ሁናቴዎች"
+    ],
+    "feature": [
+      "ስራ",
+      "የተፈለገው ስራ",
+      "የሚፈለገው ድርጊት"
+    ],
+    "given": [
+      "* ",
+      "የተሰጠ "
+    ],
+    "name": "Amharic",
+    "native": "አማርኛ",
+    "rule": [
+      "ህግ"
+    ],
+    "scenario": [
+      "ምሳሌ",
+      "ሁናቴ"
+    ],
+    "scenarioOutline": [
+      "ሁናቴ ዝርዝር",
+      "ሁናቴ አብነት"
+    ],
+    "then": [
+      "* ",
+      "ከዚያ "
+    ],
+    "when": [
+      "* ",
+      "መቼ "
     ]
   }
 }

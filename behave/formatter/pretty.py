@@ -2,13 +2,13 @@
 
 from __future__ import absolute_import, division
 import sys
+import six
+from six.moves import range, zip
 from behave.formatter.ansi_escapes import escapes, up
 from behave.formatter.base import Formatter
 from behave.model_core import Status
 from behave.model_describe import escape_cell, escape_triple_quotes
-from behave.textutil import indent, make_indentation, text as _text
-import six
-from six.moves import range, zip
+from behave.textutil import indent, text as _text
 
 
 # -----------------------------------------------------------------------------
@@ -66,9 +66,7 @@ class PrettyFormatter(Formatter):
         super(PrettyFormatter, self).__init__(stream_opener, config)
         # -- ENSURE: Output stream is open.
         self.stream = self.open()
-        isatty = getattr(self.stream, "isatty", lambda: True)
-        stream_supports_colors = isatty()
-        self.monochrome = not config.color or not stream_supports_colors
+        self.colored = config.has_colored_mode(self.stream)
         self.show_source = config.show_source
         self.show_timings = config.show_timings
         self.show_multiline = config.show_multiline
@@ -83,6 +81,9 @@ class PrettyFormatter(Formatter):
         self.indentations = []
         self.step_lines = 0
 
+    @property
+    def monochrome(self):
+        return not self.colored
 
     def reset(self):
         # -- UNUSED: self.tag_statement = None
@@ -137,11 +138,11 @@ class PrettyFormatter(Formatter):
         self._match = match
         self.print_statement()
         self.print_step(Status.executing, self._match.arguments,
-                        self._match.location, self.monochrome)
+                        self._match.location, proceed=self.monochrome)
         self.stream.flush()
 
     def result(self, step):
-        if not self.monochrome:
+        if self.colored:
             lines = self.step_lines + 1
             if self.show_multiline:
                 if step.table:
@@ -154,7 +155,7 @@ class PrettyFormatter(Formatter):
             if self._match:
                 arguments = self._match.arguments
                 location = self._match.location
-            self.print_step(step.status, arguments, location, True)
+            self.print_step(step.status, arguments, location, proceed=True)
         if step.error_message:
             self.stream.write(indent(step.error_message.strip(), u"      "))
             self.stream.write("\n\n")
@@ -164,10 +165,11 @@ class PrettyFormatter(Formatter):
         return self.format(key + "_arg")
 
     def format(self, key):
-        if self.monochrome:
+        if not self.colored:
             if self.formats is None:
                 self.formats = MonochromeFormat()
             return self.formats
+
         # -- OTHERWISE:
         if self.formats is None:
             self.formats = {}

@@ -1,5 +1,7 @@
 # -*- coding: UTF-8 -*-
-"""behave is behaviour-driven development, Python style
+# SPDX-License-Identifier: BSD-2-Clause
+"""
+behave is behaviour-driven development, Python style
 
 Behavior-driven development (or BDD) is an agile software development
 technique that encourages collaboration between developers, QA and
@@ -17,15 +19,22 @@ To get started, we recommend the `tutorial`_ and then the `test language`_ and
 """
 
 from __future__ import absolute_import
-from behave.step_registry import *      # pylint: disable=wildcard-import
-from behave.matchers import use_step_matcher, step_matcher, register_type
+# pylint: disable=no-name-in-module
+from behave.step_registry import given, when, then, step, Given, When, Then, Step
+# pylint: enable=no-name-in-module
+from behave.api.step_matchers import (
+    register_type,
+    use_default_step_matcher, use_step_matcher,
+    step_matcher
+)
 from behave.fixture import fixture, use_fixture
-from behave.version import VERSION as __version__
+from behave.version import VERSION as __version__  # noqa: F401
 
 # pylint: disable=undefined-all-variable
 __all__ = [
-    "given", "when", "then", "step", "use_step_matcher", "register_type",
+    "given", "when", "then", "step",
     "Given", "When", "Then", "Step",
+    "use_default_step_matcher", "use_step_matcher", "register_type",
     "fixture", "use_fixture",
     # -- DEPRECATING:
     "step_matcher"

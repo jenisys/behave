@@ -58,9 +58,8 @@ Feature: Issue #446 -- Support scenario hook-errors with JUnitReporter
         behave.reporter.junit.show_hostname = False
         """
 
-    @not.with_python.version=3.8
-    @not.with_python.version=3.9
-    @not.with_python.version=3.10
+    # -- SIMILAR TO; @use.with_python.max_version=3.7
+    @not.with_python.min_version=3.8
     Scenario: Hook error in before_scenario() (py.version < 3.8)
       When I run "behave -f plain --junit features/before_scenario_failure.feature"
       Then it should fail with:
@@ -89,9 +88,7 @@ Feature: Issue #446 -- Support scenario hook-errors with JUnitReporter
       And note that "the traceback is contained in the XML element <error/>"
 
 
-    @use.with_python.version=3.8
-    @use.with_python.version=3.9
-    @use.with_python.version=3.10
+    @use.with_python.min_version=3.8
     Scenario: Hook error in before_scenario() (py.version >= 3.8)
       When I run "behave -f plain --junit features/before_scenario_failure.feature"
       Then it should fail with:
@@ -124,9 +121,8 @@ Feature: Issue #446 -- Support scenario hook-errors with JUnitReporter
       And note that "the traceback is contained in the XML element <error/>"
 
 
-    @not.with_python.version=3.8
-    @not.with_python.version=3.9
-    @not.with_python.version=3.10
+    # -- SIMILAR TO: @use.with_python.max_version=3.7
+    @not.with_python.min_version=3.8
     Scenario: Hook error in after_scenario() (py.version < 3.8)
       When I run "behave -f plain --junit features/after_scenario_failure.feature"
       Then it should fail with:
@@ -157,9 +153,7 @@ Feature: Issue #446 -- Support scenario hook-errors with JUnitReporter
       And note that "the traceback is contained in the XML element <error/>"
 
 
-    @use.with_python.version=3.8
-    @use.with_python.version=3.9
-    @use.with_python.version=3.10
+    @use.with_python.min_version=3.8
     Scenario: Hook error in after_scenario() (py.version >= 3.8)
       When I run "behave -f plain --junit features/after_scenario_failure.feature"
       Then it should fail with:
